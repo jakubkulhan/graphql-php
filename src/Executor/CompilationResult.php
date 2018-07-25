@@ -3,12 +3,18 @@ namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
 use GraphQL\Error\FormattedError;
-use GraphQL\Executor\Instruction\InstructionInterface;
+use GraphQL\Executor\Instruction\Instruction;
 
 class CompilationResult implements \JsonSerializable
 {
 
-    /** @var InstructionInterface[]|null */
+    const EXECUTE_STANDARD = false;
+    const EXECUTE_SERIALLY = true;
+
+    /** @var string|null */
+    public $rootTypeName;
+
+    /** @var Instruction[]|null */
     public $program;
 
     /** @var Error[]|null */
@@ -20,10 +26,11 @@ class CompilationResult implements \JsonSerializable
     /** @var callable */
     private $errorsHandler;
 
-    public function __construct(?array $program, ?array $errors)
+    public function __construct(?string $rootTypeName, ?array $program, ?array $errors)
     {
         $this->program = $program;
         $this->errors = $errors;
+        $this->rootTypeName = $rootTypeName;
     }
 
     public function jsonSerialize()
@@ -44,6 +51,10 @@ class CompilationResult implements \JsonSerializable
                 $this->errors,
                 FormattedError::prepareFormatter($this->errorFormatter, $debug)
             );
+        }
+
+        if ($this->rootTypeName !== null) {
+            $result->rootTypeName = $this->rootTypeName;
         }
 
         if ($this->program !== null) {

@@ -21,6 +21,7 @@ use GraphQL\Type\Definition\Directive;
 use GraphQL\Type\Definition\InterfaceType;
 use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\Type;
+use GraphQL\Type\Definition\WrappingType;
 use GraphQL\Type\Introspection;
 use GraphQL\Type\Schema;
 
@@ -83,17 +84,19 @@ class Compiler
         }
 
         if (!empty($this->errors)) {
-            return new CompilationResult(null, $this->errors);
+            return new CompilationResult(null, null, $this->errors);
         }
 
         // get root type
         if ($operationNode->operation === 'query') {
+            $executeSerially = CompilationResult::EXECUTE_STANDARD;
             $rootType = $this->schema->getQueryType();
         } else if ($operationNode->operation === 'mutation') {
+            $executeSerially = CompilationResult::EXECUTE_SERIALLY;
             $rootType = $this->schema->getMutationType();
         } else {
             $this->errors[] = new Error(sprintf('Cannot compile operation type "%s".', $operationNode->operation));
-            return new CompilationResult(null, $this->errors);
+            return new CompilationResult(null, null, $this->errors);
         }
 
         // do compilation itself
@@ -104,7 +107,7 @@ class Compiler
 
         // TODO: optimize program instructions
 
-        return new CompilationResult($program, $this->errors);
+        return new CompilationResult($rootType->name, $program, $this->errors);
     }
 
     private function compileSelectionSet(Type $type, ?SelectionSetNode $selectionSet, callable $emit)
@@ -181,6 +184,10 @@ class Compiler
         if ($type instanceof ObjectType) {
             if ($type->hasField($fieldName)) {
                 $fieldType = $type->getField($fieldName)->getType();
+                if ($fieldType instanceof WrappingType) {
+                    $fieldType = $fieldType->getWrappedType(true);
+                }
+
                 if (!Type::isCompositeType($fieldType) && $field->selectionSet !== null) {
                     $this->errors[] = new Error(
                         sprintf('Field "%s" of object type "%s" is not composite - cannot query sub-fields.', $fieldName, $type->name),
@@ -209,6 +216,10 @@ class Compiler
         } else if ($type instanceof InterfaceType) {
             if ($type->hasField($fieldName)) {
                 $fieldType = $type->getField($fieldName)->getType();
+                if ($fieldType instanceof WrappingType) {
+                    $fieldType = $fieldType->getWrappedType(true);
+                }
+
                 if (!Type::isCompositeType($fieldType) && $field->selectionSet !== null) {
                     $this->errors[] = new Error(
                         sprintf('Field "%s" of interface type "%s" is not composite - cannot query sub-fields.', $fieldName, $type->name),

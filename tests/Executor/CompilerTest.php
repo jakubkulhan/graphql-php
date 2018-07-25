@@ -21,7 +21,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
         $result = $compiler->compile($documentNode, $operationName);
         $json = json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";
 
-        $fileName = __DIR__ . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . "_" . $operationName . ".json";
+        $fileName = __DIR__ . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . "Snapshots" . DIRECTORY_SEPARATOR . $operationName . ".json";
         if (!file_exists($fileName)) {
             file_put_contents($fileName, $json);
         }
@@ -196,6 +196,17 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
                 }
                 fragment HumanName on Human {
                     name
+                }',
+            ],
+            [
+                StarWarsSchema::build(),
+                'query StarWarsListOf($id: ID!) {
+                    human(id: $id) {
+                        id
+                        friends {
+                            id
+                        }
+                    }
                 }',
             ],
         ];

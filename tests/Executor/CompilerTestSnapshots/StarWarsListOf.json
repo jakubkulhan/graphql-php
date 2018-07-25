@@ -1,10 +1,5 @@
 {
-    "errors": [
-        {
-            "message": "Object type \"Human\" does not have field \"alsoDoesNotExist\".",
-            "category": "graphql"
-        }
-    ],
+    "rootTypeName": "Query",
     "program": [
         {
             "kind": "ObjectField",
@@ -26,6 +21,20 @@
                     "typeName": "Human",
                     "fieldName": "id",
                     "resultName": "id"
+                },
+                {
+                    "kind": "ObjectField",
+                    "typeName": "Human",
+                    "fieldName": "friends",
+                    "resultName": "friends",
+                    "children": [
+                        {
+                            "kind": "InterfaceField",
+                            "typeName": "Character",
+                            "fieldName": "id",
+                            "resultName": "id"
+                        }
+                    ]
                 }
             ]
         }

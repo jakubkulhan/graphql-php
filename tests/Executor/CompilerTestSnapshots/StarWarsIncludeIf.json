@@ -1,7 +1,8 @@
 {
+    "rootTypeName": "Query",
     "program": [
         {
-            "kind": "SkipIf",
+            "kind": "IncludeIf",
             "condition": {
                 "kind": "Variable",
                 "name": {

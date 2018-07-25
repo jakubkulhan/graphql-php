@@ -1,7 +1,10 @@
 <?php
 namespace GraphQL\Executor\Instruction;
 
-class TypeNameInstruction implements InstructionInterface
+use GraphQL\Executor\NewExecutor;
+use GraphQL\Type\Definition\Type;
+
+class TypeNameInstruction implements Instruction
 {
 
     use InstructionTrait;
@@ -14,6 +17,11 @@ class TypeNameInstruction implements InstructionInterface
     public function __construct(string $resultName)
     {
         $this->resultName = $resultName;
+    }
+
+    public function run(NewExecutor $executor, Type $type, $value, $result, array $path)
+    {
+        $result->{$this->resultName} = $type->name;
     }
 
 }

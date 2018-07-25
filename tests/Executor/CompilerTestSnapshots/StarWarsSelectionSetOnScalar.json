@@ -5,5 +5,6 @@
             "category": "graphql"
         }
     ],
+    "rootTypeName": "Query",
     "program": []
 }
