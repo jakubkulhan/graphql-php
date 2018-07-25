@@ -1,7 +1,7 @@
 <?php
 namespace GraphQL\Language\AST;
 
-class VariableNode extends Node
+class VariableNode extends Node implements ValueNode
 {
     public $kind = NodeKind::VARIABLE;
 

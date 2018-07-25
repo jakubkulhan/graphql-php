@@ -204,7 +204,7 @@ class Schema
      *
      * @api
      * @param string $name
-     * @return Type
+     * @return Type|null
      */
     public function getType($name)
     {
@@ -216,6 +216,15 @@ class Schema
             $this->resolvedTypes[$name] = $type;
         }
         return $this->resolvedTypes[$name];
+    }
+
+    /**
+     * @param string $name
+     * @return bool
+     */
+    public function hasType($name)
+    {
+        return $this->getType($name) !== null;
     }
 
     /**

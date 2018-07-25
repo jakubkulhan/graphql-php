@@ -1,0 +1,33 @@
+{
+    "program": [
+        {
+            "kind": "ObjectField",
+            "typeName": "Query",
+            "fieldName": "hero",
+            "resultName": "hero",
+            "argumentValueMap": {
+                "episode": {
+                    "kind": "IntValue",
+                    "value": "5"
+                }
+            },
+            "children": [
+                {
+                    "kind": "IncludeIf",
+                    "condition": {
+                        "kind": "BooleanValue",
+                        "value": false
+                    },
+                    "children": [
+                        {
+                            "kind": "ObjectField",
+                            "typeName": "Human",
+                            "fieldName": "homePlanet",
+                            "resultName": "homePlanet"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

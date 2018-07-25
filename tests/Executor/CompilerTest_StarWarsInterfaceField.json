@@ -1,0 +1,42 @@
+{
+    "program": [
+        {
+            "kind": "ObjectField",
+            "typeName": "Query",
+            "fieldName": "hero",
+            "resultName": "hero",
+            "argumentValueMap": {
+                "episode": {
+                    "kind": "IntValue",
+                    "value": "5"
+                }
+            },
+            "children": [
+                {
+                    "kind": "InterfaceField",
+                    "typeName": "Character",
+                    "fieldName": "id",
+                    "resultName": "id"
+                },
+                {
+                    "kind": "InterfaceField",
+                    "typeName": "Character",
+                    "fieldName": "name",
+                    "resultName": "name"
+                },
+                {
+                    "kind": "ObjectField",
+                    "typeName": "Human",
+                    "fieldName": "homePlanet",
+                    "resultName": "homePlanet"
+                },
+                {
+                    "kind": "ObjectField",
+                    "typeName": "Droid",
+                    "fieldName": "primaryFunction",
+                    "resultName": "primaryFunction"
+                }
+            ]
+        }
+    ]
+}

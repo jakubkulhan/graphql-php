@@ -1,0 +1,39 @@
+{
+    "program": [
+        {
+            "kind": "SkipIf",
+            "condition": {
+                "kind": "Variable",
+                "name": {
+                    "kind": "Name",
+                    "value": "condition"
+                }
+            },
+            "children": [
+                {
+                    "kind": "ObjectField",
+                    "typeName": "Query",
+                    "fieldName": "droid",
+                    "resultName": "droid",
+                    "argumentValueMap": {
+                        "id": {
+                            "kind": "Variable",
+                            "name": {
+                                "kind": "Name",
+                                "value": "id"
+                            }
+                        }
+                    },
+                    "children": [
+                        {
+                            "kind": "ObjectField",
+                            "typeName": "Droid",
+                            "fieldName": "id",
+                            "resultName": "id"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

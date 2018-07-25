@@ -1,0 +1,18 @@
+{
+    "program": [
+        {
+            "kind": "ObjectField",
+            "typeName": "Query",
+            "fieldName": "human",
+            "resultName": "human",
+            "children": [
+                {
+                    "kind": "ObjectField",
+                    "typeName": "Human",
+                    "fieldName": "name",
+                    "resultName": "name"
+                }
+            ]
+        }
+    ]
+}

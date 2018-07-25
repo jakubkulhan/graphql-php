@@ -1,0 +1,36 @@
+{
+    "program": [
+        {
+            "kind": "ObjectField",
+            "typeName": "Query",
+            "fieldName": "human",
+            "resultName": "human",
+            "argumentValueMap": {
+                "id": {
+                    "kind": "Variable",
+                    "name": {
+                        "kind": "Name",
+                        "value": "id"
+                    }
+                }
+            },
+            "children": [
+                {
+                    "kind": "SkipIf",
+                    "condition": {
+                        "kind": "BooleanValue",
+                        "value": false
+                    },
+                    "children": [
+                        {
+                            "kind": "ObjectField",
+                            "typeName": "Human",
+                            "fieldName": "name",
+                            "resultName": "name"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

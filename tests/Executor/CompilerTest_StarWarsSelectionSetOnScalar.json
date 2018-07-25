@@ -1,0 +1,9 @@
+{
+    "errors": [
+        {
+            "message": "Field \"name\" of object type \"Human\" is not composite - cannot query sub-fields.",
+            "category": "graphql"
+        }
+    ],
+    "program": []
+}

@@ -141,6 +141,19 @@ class ObjectType extends Type implements OutputType, CompositeType, NamedType
     }
 
     /**
+     * @param string $name
+     * @return bool
+     */
+    public function hasField($name)
+    {
+        if (null === $this->fields) {
+            $this->getFields();
+        }
+
+        return isset($this->fields[$name]);
+    }
+
+    /**
      * @return InterfaceType[]
      */
     public function getInterfaces()

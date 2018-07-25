@@ -87,6 +87,19 @@ class InterfaceType extends Type implements AbstractType, OutputType, CompositeT
     }
 
     /**
+     * @param string $name
+     * @return bool
+     */
+    public function hasField($name)
+    {
+        if (null === $this->fields) {
+            $this->getFields();
+        }
+
+        return isset($this->fields[$name]);
+    }
+
+    /**
      * Resolves concrete ObjectType for given object value
      *
      * @param $objectValue

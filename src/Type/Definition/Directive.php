@@ -13,6 +13,12 @@ class Directive
 {
     const DEFAULT_DEPRECATION_REASON = 'No longer supported';
 
+    const INCLUDE_NAME = 'include';
+    const IF_ARGUMENT_NAME = 'if';
+    const SKIP_NAME = 'skip';
+    const DEPRECATED_NAME = 'deprecated';
+    const REASON_ARGUMENT_NAME = 'reason';
+
     /**
      * @var array
      */
@@ -63,8 +69,8 @@ class Directive
     {
         if (!self::$internalDirectives) {
             self::$internalDirectives = [
-                'include' => new self([
-                    'name' => 'include',
+                self::INCLUDE_NAME => new self([
+                    'name' => self::INCLUDE_NAME,
                     'description' => 'Directs the executor to include this field or fragment only when the `if` argument is true.',
                     'locations' => [
                         DirectiveLocation::FIELD,
@@ -73,14 +79,14 @@ class Directive
                     ],
                     'args' => [
                         new FieldArgument([
-                            'name' => 'if',
+                            'name' => self::IF_ARGUMENT_NAME,
                             'type' => Type::nonNull(Type::boolean()),
                             'description' => 'Included when true.'
                         ])
                     ],
                 ]),
-                'skip' => new self([
-                    'name' => 'skip',
+                self::SKIP_NAME => new self([
+                    'name' => self::SKIP_NAME,
                     'description' => 'Directs the executor to skip this field or fragment when the `if` argument is true.',
                     'locations' => [
                         DirectiveLocation::FIELD,
@@ -89,14 +95,14 @@ class Directive
                     ],
                     'args' => [
                         new FieldArgument([
-                            'name' => 'if',
+                            'name' => self::IF_ARGUMENT_NAME,
                             'type' => Type::nonNull(Type::boolean()),
                             'description' => 'Skipped when true.'
                         ])
                     ]
                 ]),
-                'deprecated' => new self([
-                    'name' => 'deprecated',
+                self::DEPRECATED_NAME => new self([
+                    'name' => self::DEPRECATED_NAME,
                     'description' => 'Marks an element of a GraphQL schema as no longer supported.',
                     'locations' => [
                         DirectiveLocation::FIELD_DEFINITION,
@@ -104,7 +110,7 @@ class Directive
                     ],
                     'args' => [
                         new FieldArgument([
-                            'name' => 'reason',
+                            'name' => self::REASON_ARGUMENT_NAME,
                             'type' => Type::string(),
                             'description' =>
                                 'Explains why this element was deprecated, usually also including a ' .

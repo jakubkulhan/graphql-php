@@ -34,6 +34,9 @@ class TypeKind {
 
 class Introspection
 {
+
+    const TYPE_NAME_FIELD_NAME = '__typename';
+
     private static $map = [];
 
     /**
@@ -703,9 +706,9 @@ EOD;
 
     public static function typeNameMetaFieldDef()
     {
-        if (!isset(self::$map['__typename'])) {
-            self::$map['__typename'] = FieldDefinition::create([
-                'name' => '__typename',
+        if (!isset(self::$map[self::TYPE_NAME_FIELD_NAME])) {
+            self::$map[self::TYPE_NAME_FIELD_NAME] = FieldDefinition::create([
+                'name' => self::TYPE_NAME_FIELD_NAME,
                 'type' => Type::nonNull(Type::string()),
                 'description' => 'The name of the current Object type at runtime.',
                 'args' => [],
@@ -719,6 +722,6 @@ EOD;
                 }
             ]);
         }
-        return self::$map['__typename'];
+        return self::$map[self::TYPE_NAME_FIELD_NAME];
     }
 }

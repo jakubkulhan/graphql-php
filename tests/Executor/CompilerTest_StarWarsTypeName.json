@@ -1,0 +1,12 @@
+{
+    "program": [
+        {
+            "kind": "TypeName",
+            "resultName": "queryTypeName"
+        },
+        {
+            "kind": "TypeName",
+            "resultName": "__typename"
+        }
+    ]
+}
