@@ -7,6 +7,9 @@ use GraphQL\Language\AST\NodeKind;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\Parser;
 use GraphQL\Tests\StarWarsSchema;
+use GraphQL\Type\Definition\ObjectType;
+use GraphQL\Type\Definition\Type;
+use GraphQL\Type\Definition\UnionType;
 use GraphQL\Type\Schema;
 
 class CompilerTest extends \PHPUnit_Framework_TestCase
@@ -19,6 +22,13 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
     {
         $compiler = new Compiler($schema);
         $result = $compiler->compile($documentNode, $operationName);
+
+        if (strncmp($operationName, 'ShouldEmitError', strlen('ShouldEmitError')) === 0) {
+            $this->assertNotEmpty($result->errors);
+        } else {
+            $this->assertEmpty($result->errors);
+        }
+
         $json = json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";
 
         $fileName = __DIR__ . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . "Snapshots" . DIRECTORY_SEPARATOR . $operationName . ".json";
@@ -34,7 +44,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
         $testCases = [
             [
                 StarWarsSchema::build(),
-                'query StarWarsHumanNoArguments {
+                'query ShouldEmitObjectFieldForFieldWithoutArguments {
                     human {
                         name                    
                     }
@@ -42,7 +52,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsHumanWithArgument($id: ID!) {
+                'query ShouldEmitObjectFieldForFieldThatHasArguments($id: ID!) {
                     human(id: $id) {
                         name
                     }
@@ -50,13 +60,13 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsUnknownRootQueryField {
+                'query ShouldEmitErrorForRootFieldThatDoesNotExist {
                     doesNotExist
                 }',
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsUnknownSubField($id: ID!) {
+                'query ShouldEmitErrorForSubFieldThatDoesNotExist($id: ID!) {
                     human(id: $id) {
                         id
                         alsoDoesNotExist
@@ -65,7 +75,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsInlineFragmentSpread($id: ID!) {
+                'query ShouldEmitObjectFieldForInlineFragment($id: ID!) {
                     human(id: $id) {
                         ... on Human {
                             name
@@ -75,7 +85,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsNamedFragmentSpread($id: ID!) {
+                'query ShouldEmitObjectFieldForFragmentSpread($id: ID!) {
                     human(id: $id) {
                         ...HumanName
                     }
@@ -86,37 +96,87 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsTypeName {
+                'query ShouldEmitTypeNameOnObjectType {
                     queryTypeName: __typename
                     __typename
                 }',
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsTypeNameOnInterface {
+                'query ShouldEmitTypeNameOnInterfaceType {
                     hero(episode: 5) {
                         __typename
                     }
                 }',
             ],
             [
+                (function () {
+                    $fooType = new ObjectType([
+                        "name" => "Foo",
+                        "fields" => [
+                            "foo" => Type::string(),
+                        ],
+                    ]);
+
+                    $barType = new ObjectType([
+                        "name" => "Bar",
+                        "fields" => [
+                            "bar" => Type::string(),
+                        ],
+                    ]);
+
+                    $resultType = new UnionType([
+                        "name" => "Result",
+                        "types" => [$fooType, $barType],
+                    ]);
+
+                    return new Schema([
+                        "query" => new ObjectType([
+                            "name" => "Query",
+                            "fields" => [
+                                "result" => $resultType,
+                            ],
+                        ]),
+                    ]);
+                })(),
+                'query ShouldEmitTypeNameOnUnionType {
+                    result {
+                        __typename
+                    }
+                }',
+            ],
+            [
                 StarWarsSchema::build(),
-                'query StarWarsInterfaceField {
+                'query ShouldEmitInterfaceField {
                     hero(episode: 5) {
-                        id
                         name
-                        ... on Human {
-                            homePlanet
-                        }
-                        ... on Droid {
-                            primaryFunction
+                    }
+                }',
+            ],
+            [
+                StarWarsSchema::build(),
+                'query ShouldEmitInterfaceFieldForInlineFragment {
+                    hero(episode: 5) {
+                        ... on Character {
+                            name
                         }
                     }
                 }',
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsSelectionSetOnScalar {
+                'query ShouldEmitInterfaceFieldForFragmentSpread {
+                    hero(episode: 5) {
+                        ...CharacterName
+                    }
+                }
+                fragment CharacterName on Character {
+                    name
+                }',
+            ],
+            [
+                StarWarsSchema::build(),
+                'query ShouldEmitErrorWhenTryingToQuerySubFieldsOnScalar {
                     human {
                         name {
                             wtf
@@ -126,7 +186,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsIncludeIf($id: ID!, $condition: Boolean!) {
+                'query ShouldEmitIncludeIf($id: ID!, $condition: Boolean!) {
                     droid(id: $id) @include(if: $condition) {
                         id
                     }
@@ -134,7 +194,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsSkipIf($id: ID!, $condition: Boolean!) {
+                'query ShouldEmitSkipIf($id: ID!, $condition: Boolean!) {
                     droid(id: $id) @skip(if: $condition) {
                         id
                     }
@@ -142,7 +202,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsIncludeIfSkipIf($id: ID!, $condition: Boolean!) {
+                'query ShouldEmitIncludeIfSkipIfInOrder($id: ID!, $condition: Boolean!) {
                     droid(id: $id) @include(if: $condition) @skip(if: $condition) {
                         id
                     }
@@ -150,7 +210,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsSkipIfIncludeIf($id: ID!, $condition: Boolean!) {
+                'query ShouldEmitSkipIfIncludeIfInOrder($id: ID!, $condition: Boolean!) {
                     droid(id: $id) @skip(if: $condition) @include(if: $condition) {
                         id
                     }
@@ -158,7 +218,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsSkipIfInlineFragment {
+                'query ShouldEmitSkipIfAroundInlineFragment {
                     hero(episode: 5) {
                         ... on Human @skip(if: false) {
                             homePlanet
@@ -168,7 +228,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsIncludeIfInlineFragment {
+                'query ShouldEmitIncludeIfAroundInlineFragment {
                     hero(episode: 5) {
                         ... on Human @include(if: false) {
                             homePlanet
@@ -178,7 +238,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsSkipIfFragmentSpread($id: ID!) {
+                'query ShouldEmitSkipIfAroundFragmentSpread($id: ID!) {
                     human(id: $id) {
                         ...HumanName @skip(if: false)
                     }
@@ -189,7 +249,7 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsIncludeIfFragmentSpread($id: ID!) {
+                'query ShouldEmitIncludeIfAroundFragmentSpread($id: ID!) {
                     human(id: $id) {
                         ...HumanName @include(if: false)
                     }
@@ -200,12 +260,21 @@ class CompilerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query StarWarsListOf($id: ID!) {
+                'query ShouldEmitSubFieldsIfFieldIsListOfObjects($id: ID!) {
                     human(id: $id) {
                         id
                         friends {
                             id
                         }
+                    }
+                }',
+            ],
+            [
+                StarWarsSchema::build(),
+                'query ShouldEmitSingleObjectFieldForSameResultName($id: ID!) {
+                    human(id: $id) {
+                        name
+                        name: secretBackstory 
                     }
                 }',
             ],

@@ -4,12 +4,16 @@ namespace GraphQL\Executor;
 use GraphQL\Error\Error;
 use GraphQL\Error\FormattedError;
 use GraphQL\Executor\Instruction\Instruction;
+use GraphQL\Language\AST\OperationDefinitionNode;
 
 class CompilationResult implements \JsonSerializable
 {
 
-    const EXECUTE_STANDARD = false;
-    const EXECUTE_SERIALLY = true;
+    /** @var OperationDefinitionNode|null */
+    public $operation;
+
+    /** @var array */
+    public $fragments;
 
     /** @var string|null */
     public $rootTypeName;
@@ -26,8 +30,14 @@ class CompilationResult implements \JsonSerializable
     /** @var callable */
     private $errorsHandler;
 
-    public function __construct(?string $rootTypeName, ?array $program, ?array $errors)
+    public function __construct(?OperationDefinitionNode $operation,
+                                ?array $fragments,
+                                ?string $rootTypeName,
+                                ?array $program,
+                                ?array $errors)
     {
+        $this->operation = $operation;
+        $this->fragments = $fragments;
         $this->program = $program;
         $this->errors = $errors;
         $this->rootTypeName = $rootTypeName;
@@ -40,25 +50,33 @@ class CompilationResult implements \JsonSerializable
 
     public function toArray($debug = false)
     {
-        $result = new \stdClass();
+        $result = [];
 
         if (!empty($this->errors)) {
             $errorsHandler = $this->errorsHandler ?: function (array $errors, callable $formatter) {
                 return array_map($formatter, $errors);
             };
 
-            $result->errors = $errorsHandler(
+            $result['errors'] = $errorsHandler(
                 $this->errors,
                 FormattedError::prepareFormatter($this->errorFormatter, $debug)
             );
         }
 
+        if ($this->operation !== null) {
+            $result['operation'] = $this->operation->toArray(true);
+        }
+
+        if (!empty($this->fragments)) {
+            $result['fragments'] = $this->fragments;
+        }
+
         if ($this->rootTypeName !== null) {
-            $result->rootTypeName = $this->rootTypeName;
+            $result['rootTypeName'] = $this->rootTypeName;
         }
 
         if ($this->program !== null) {
-            $result->program = $this->program;
+            $result['program'] = $this->program;
         }
 
         return $result;

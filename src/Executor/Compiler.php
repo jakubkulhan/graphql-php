@@ -32,7 +32,7 @@ class Compiler
     private $schema;
 
     /** @var FragmentDefinitionNode[] */
-    private $fragmentDefinitionNodes = [];
+    private $fragments = [];
 
     /** @var Error[] */
     private $errors = [];
@@ -45,7 +45,7 @@ class Compiler
     public function compile(DocumentNode $documentNode, ?string $operationName = null)
     {
         // initialize
-        $this->fragmentDefinitionNodes = [];
+        $this->fragments = [];
         $this->errors = [];
 
         // find operation
@@ -69,7 +69,7 @@ class Compiler
 
             } else if ($definitionNode->kind === NodeKind::FRAGMENT_DEFINITION) {
                 /** @var FragmentDefinitionNode $definitionNode */
-                $this->fragmentDefinitionNodes[$definitionNode->name->value] = $definitionNode;
+                $this->fragments[$definitionNode->name->value] = $definitionNode;
             }
         }
 
@@ -84,19 +84,17 @@ class Compiler
         }
 
         if (!empty($this->errors)) {
-            return new CompilationResult(null, null, $this->errors);
+            return new CompilationResult($operationNode, $this->fragments, null, null, $this->errors);
         }
 
         // get root type
         if ($operationNode->operation === 'query') {
-            $executeSerially = CompilationResult::EXECUTE_STANDARD;
             $rootType = $this->schema->getQueryType();
         } else if ($operationNode->operation === 'mutation') {
-            $executeSerially = CompilationResult::EXECUTE_SERIALLY;
             $rootType = $this->schema->getMutationType();
         } else {
             $this->errors[] = new Error(sprintf('Cannot compile operation type "%s".', $operationNode->operation));
-            return new CompilationResult(null, null, $this->errors);
+            return new CompilationResult($operationNode, $this->fragments, null, null, $this->errors);
         }
 
         // do compilation itself
@@ -107,7 +105,7 @@ class Compiler
 
         // TODO: optimize program instructions
 
-        return new CompilationResult($rootType->name, $program, $this->errors);
+        return new CompilationResult($operationNode, $this->fragments, $rootType->name, $program, $this->errors);
     }
 
     private function compileSelectionSet(Type $type, ?SelectionSetNode $selectionSet, callable $emit)
@@ -257,7 +255,7 @@ class Compiler
     {
         $fragmentName = $fragmentSpread->name->value;
 
-        if (!isset($this->fragmentDefinitionNodes[$fragmentName])) {
+        if (!isset($this->fragments[$fragmentName])) {
             $this->errors[] = new Error(
                 sprintf('Fragment "%s" does not exist.', $fragmentName),
                 $fragmentSpread
@@ -265,7 +263,7 @@ class Compiler
             return;
         }
 
-        $fragmentDefinition = $this->fragmentDefinitionNodes[$fragmentName];
+        $fragmentDefinition = $this->fragments[$fragmentName];
         $conditionTypeName = $fragmentDefinition->typeCondition->name->value;
         $selectionSet = $fragmentDefinition->selectionSet;
 

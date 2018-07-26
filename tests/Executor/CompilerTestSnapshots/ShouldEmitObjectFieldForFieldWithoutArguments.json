@@ -1,0 +1,57 @@
+{
+    "operation": {
+        "kind": "OperationDefinition",
+        "name": {
+            "kind": "Name",
+            "value": "ShouldEmitObjectFieldForFieldWithoutArguments"
+        },
+        "operation": "query",
+        "variableDefinitions": [],
+        "directives": [],
+        "selectionSet": {
+            "kind": "SelectionSet",
+            "selections": [
+                {
+                    "kind": "Field",
+                    "name": {
+                        "kind": "Name",
+                        "value": "human"
+                    },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                        "kind": "SelectionSet",
+                        "selections": [
+                            {
+                                "kind": "Field",
+                                "name": {
+                                    "kind": "Name",
+                                    "value": "name"
+                                },
+                                "arguments": [],
+                                "directives": []
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    },
+    "rootTypeName": "Query",
+    "program": [
+        {
+            "kind": "ObjectField",
+            "typeName": "Query",
+            "fieldName": "human",
+            "resultName": "human",
+            "children": [
+                {
+                    "kind": "ObjectField",
+                    "typeName": "Human",
+                    "fieldName": "name",
+                    "resultName": "name"
+                }
+            ]
+        }
+    ]
+}

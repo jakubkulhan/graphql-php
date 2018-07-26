@@ -1,0 +1,158 @@
+{
+    "operation": {
+        "kind": "OperationDefinition",
+        "name": {
+            "kind": "Name",
+            "value": "ShouldEmitIncludeIf"
+        },
+        "operation": "query",
+        "variableDefinitions": [
+            {
+                "kind": "VariableDefinition",
+                "variable": {
+                    "kind": "Variable",
+                    "name": {
+                        "kind": "Name",
+                        "value": "id"
+                    }
+                },
+                "type": {
+                    "kind": "NonNullType",
+                    "type": {
+                        "kind": "NamedType",
+                        "name": {
+                            "kind": "Name",
+                            "value": "ID"
+                        }
+                    }
+                }
+            },
+            {
+                "kind": "VariableDefinition",
+                "variable": {
+                    "kind": "Variable",
+                    "name": {
+                        "kind": "Name",
+                        "value": "condition"
+                    }
+                },
+                "type": {
+                    "kind": "NonNullType",
+                    "type": {
+                        "kind": "NamedType",
+                        "name": {
+                            "kind": "Name",
+                            "value": "Boolean"
+                        }
+                    }
+                }
+            }
+        ],
+        "directives": [],
+        "selectionSet": {
+            "kind": "SelectionSet",
+            "selections": [
+                {
+                    "kind": "Field",
+                    "name": {
+                        "kind": "Name",
+                        "value": "droid"
+                    },
+                    "arguments": [
+                        {
+                            "kind": "Argument",
+                            "value": {
+                                "kind": "Variable",
+                                "name": {
+                                    "kind": "Name",
+                                    "value": "id"
+                                }
+                            },
+                            "name": {
+                                "kind": "Name",
+                                "value": "id"
+                            }
+                        }
+                    ],
+                    "directives": [
+                        {
+                            "kind": "Directive",
+                            "name": {
+                                "kind": "Name",
+                                "value": "include"
+                            },
+                            "arguments": [
+                                {
+                                    "kind": "Argument",
+                                    "value": {
+                                        "kind": "Variable",
+                                        "name": {
+                                            "kind": "Name",
+                                            "value": "condition"
+                                        }
+                                    },
+                                    "name": {
+                                        "kind": "Name",
+                                        "value": "if"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "selectionSet": {
+                        "kind": "SelectionSet",
+                        "selections": [
+                            {
+                                "kind": "Field",
+                                "name": {
+                                    "kind": "Name",
+                                    "value": "id"
+                                },
+                                "arguments": [],
+                                "directives": []
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    },
+    "rootTypeName": "Query",
+    "program": [
+        {
+            "kind": "IncludeIf",
+            "condition": {
+                "kind": "Variable",
+                "name": {
+                    "kind": "Name",
+                    "value": "condition"
+                }
+            },
+            "children": [
+                {
+                    "kind": "ObjectField",
+                    "typeName": "Query",
+                    "fieldName": "droid",
+                    "resultName": "droid",
+                    "argumentValueMap": {
+                        "id": {
+                            "kind": "Variable",
+                            "name": {
+                                "kind": "Name",
+                                "value": "id"
+                            }
+                        }
+                    },
+                    "children": [
+                        {
+                            "kind": "ObjectField",
+                            "typeName": "Droid",
+                            "fieldName": "id",
+                            "resultName": "id"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,75 @@
+{
+    "operation": {
+        "kind": "OperationDefinition",
+        "name": {
+            "kind": "Name",
+            "value": "ShouldEmitInterfaceField"
+        },
+        "operation": "query",
+        "variableDefinitions": [],
+        "directives": [],
+        "selectionSet": {
+            "kind": "SelectionSet",
+            "selections": [
+                {
+                    "kind": "Field",
+                    "name": {
+                        "kind": "Name",
+                        "value": "hero"
+                    },
+                    "arguments": [
+                        {
+                            "kind": "Argument",
+                            "value": {
+                                "kind": "IntValue",
+                                "value": "5"
+                            },
+                            "name": {
+                                "kind": "Name",
+                                "value": "episode"
+                            }
+                        }
+                    ],
+                    "directives": [],
+                    "selectionSet": {
+                        "kind": "SelectionSet",
+                        "selections": [
+                            {
+                                "kind": "Field",
+                                "name": {
+                                    "kind": "Name",
+                                    "value": "name"
+                                },
+                                "arguments": [],
+                                "directives": []
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    },
+    "rootTypeName": "Query",
+    "program": [
+        {
+            "kind": "ObjectField",
+            "typeName": "Query",
+            "fieldName": "hero",
+            "resultName": "hero",
+            "argumentValueMap": {
+                "episode": {
+                    "kind": "IntValue",
+                    "value": "5"
+                }
+            },
+            "children": [
+                {
+                    "kind": "InterfaceField",
+                    "typeName": "Character",
+                    "fieldName": "name",
+                    "resultName": "name"
+                }
+            ]
+        }
+    ]
+}

@@ -40,6 +40,9 @@ class NewExecutor
     /** @var mixed|null */
     public $variableValues;
 
+    /** @var CompilationResult */
+    public $compilation;
+
     /** @var Error[] */
     private $errors;
 
@@ -93,7 +96,7 @@ class NewExecutor
 
         $executor = new static(
             $schema,
-            $fieldResolver ?: static::$defaultFieldResolver,
+            $fieldResolver ?: self::$defaultFieldResolver,
             static::getPromiseAdapter(),
             $rootValue,
             $contextValue,
@@ -111,6 +114,7 @@ class NewExecutor
 
     public function doExecute(CompilationResult $compilation)
     {
+        $this->compilation = $compilation;
         $this->errors = $compilation->errors;
         $this->pipeline = new \SplDoublyLinkedList();
         $this->pending = 0;

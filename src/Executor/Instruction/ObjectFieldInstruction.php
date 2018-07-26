@@ -78,9 +78,9 @@ class ObjectFieldInstruction implements Instruction
             $type,
             array_merge($path, [$this->resultName]),
             $executor->schema,
-            [], // FIXME: real fragments
+            $executor->compilation->fragments,
             $executor->rootValue,
-            null, // FIXME: real operation node
+            $executor->compilation->operation,
             $executor->variableValues
         );
 

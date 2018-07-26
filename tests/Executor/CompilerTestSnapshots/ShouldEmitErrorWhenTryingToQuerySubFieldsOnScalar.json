@@ -1,0 +1,62 @@
+{
+    "errors": [
+        {
+            "message": "Field \"name\" of object type \"Human\" is not composite - cannot query sub-fields.",
+            "category": "graphql"
+        }
+    ],
+    "operation": {
+        "kind": "OperationDefinition",
+        "name": {
+            "kind": "Name",
+            "value": "ShouldEmitErrorWhenTryingToQuerySubFieldsOnScalar"
+        },
+        "operation": "query",
+        "variableDefinitions": [],
+        "directives": [],
+        "selectionSet": {
+            "kind": "SelectionSet",
+            "selections": [
+                {
+                    "kind": "Field",
+                    "name": {
+                        "kind": "Name",
+                        "value": "human"
+                    },
+                    "arguments": [],
+                    "directives": [],
+                    "selectionSet": {
+                        "kind": "SelectionSet",
+                        "selections": [
+                            {
+                                "kind": "Field",
+                                "name": {
+                                    "kind": "Name",
+                                    "value": "name"
+                                },
+                                "arguments": [],
+                                "directives": [],
+                                "selectionSet": {
+                                    "kind": "SelectionSet",
+                                    "selections": [
+                                        {
+                                            "kind": "Field",
+                                            "name": {
+                                                "kind": "Name",
+                                                "value": "wtf"
+                                            },
+                                            "arguments": [],
+                                            "directives": []
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    },
+    "rootTypeName": "Query",
+    "program": []
+}
