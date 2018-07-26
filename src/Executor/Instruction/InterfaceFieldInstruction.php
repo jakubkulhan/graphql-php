@@ -3,9 +3,7 @@ namespace GraphQL\Executor\Instruction;
 
 use GraphQL\Error\Error;
 use GraphQL\Executor\NewExecutor;
-use GraphQL\Type\Definition\InterfaceType;
 use GraphQL\Type\Definition\ObjectType;
-use GraphQL\Type\Definition\ResolveInfo;
 use GraphQL\Type\Definition\Type;
 
 class InterfaceFieldInstruction implements Instruction
@@ -41,44 +39,26 @@ class InterfaceFieldInstruction implements Instruction
 
     public function run(NewExecutor $executor, Type $type, $value, $result, array $path)
     {
-        if ($type->name !== $this->typeName) {
+        if ($type instanceof ObjectType) {
             throw new Error(
-                sprintf('Expected to execute on interface type "%s", but got type "%s".', $this->typeName, $type->name),
+                sprintf('Expected to execute on object, but got type "%s" of class "%s".', $type->name, get_class($type)),
                 null,
                 null,
                 null,
                 array_merge($path, [$this->resultName])
             );
         }
-        /** @var InterfaceType $type */
+        /** @var ObjectType $type */
 
-        $resolveInfo = new ResolveInfo([]); // FIXME: real ResolveInfo
-
-        /** @var ObjectType|null $objectType */
-        $objectType = $type->resolveType($value, $executor->contextValue, $resolveInfo);
-        if ($objectType === null) {
-            throw new Error(
-                sprintf(
-                    'Interface "%s" did not resolve concrete object type for value of type "%s".',
-                    $type->name,
-                    gettype($value) . (is_object($value) ? " of class " . get_class($value) : "")
-                ),
-                null,
-                null,
-                null,
-                array_merge($path, [$this->resultName])
-            );
-        }
-
-        $objectFieldInstruction = new ObjectFieldInstruction(
-            $objectType->name,
+        $newInstruction = new ObjectFieldInstruction(
+            $type->name,
             $this->fieldName,
             $this->resultName,
             $this->argumentValueMap,
             $this->children
         );
 
-        $executor->unshift($objectFieldInstruction, $type, $value, $result, $path);
+        $executor->unshift($newInstruction, $type, $value, $result, $path);
     }
 
 }

@@ -8,7 +8,6 @@ use GraphQL\Language\AST\InlineFragmentNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Type\Schema;
-use GraphQL\Utils\Utils;
 
 /**
  * Structure containing information useful for field resolution process.
@@ -96,9 +95,27 @@ class ResolveInfo
      */
     public $variableValues;
 
-    public function __construct(array $values)
+    public function __construct(string $fieldName,
+                                $fieldNodes,
+                                $returnType,
+                                ObjectType $parentType,
+                                $path,
+                                Schema $schema,
+                                $fragments,
+                                $rootValue,
+                                ?OperationDefinitionNode $operation,
+                                $variableValues)
     {
-        Utils::assign($this, $values);
+        $this->fieldName = $fieldName;
+        $this->fieldNodes = $fieldNodes;
+        $this->returnType = $returnType;
+        $this->parentType = $parentType;
+        $this->path = $path;
+        $this->schema = $schema;
+        $this->fragments = $fragments;
+        $this->rootValue = $rootValue;
+        $this->operation = $operation;
+        $this->variableValues = $variableValues;
     }
 
     /**

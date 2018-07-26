@@ -32,7 +32,7 @@ class NewExecutor
     public $promiseAdapter;
 
     /** @var mixed|null */
-    private $rootValue;
+    public $rootValue;
 
     /** @var mixed|null */
     public $contextValue;
@@ -114,6 +114,8 @@ class NewExecutor
         $this->errors = $compilation->errors;
         $this->pipeline = new \SplDoublyLinkedList();
         $this->pending = 0;
+
+        // TODO: coerce variable values
 
         $rootType = $this->schema->getType($compilation->rootTypeName);
 

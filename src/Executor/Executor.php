@@ -619,18 +619,18 @@ class Executor
 
         // The resolve function's optional third argument is a collection of
         // information about the current execution state.
-        $info = new ResolveInfo([
-            'fieldName'      => $fieldName,
-            'fieldNodes'     => $fieldNodes,
-            'returnType'     => $returnType,
-            'parentType'     => $parentType,
-            'path'           => $path,
-            'schema'         => $exeContext->schema,
-            'fragments'      => $exeContext->fragments,
-            'rootValue'      => $exeContext->rootValue,
-            'operation'      => $exeContext->operation,
-            'variableValues' => $exeContext->variableValues,
-        ]);
+        $info = new ResolveInfo(
+            $fieldName,
+            $fieldNodes,
+            $returnType,
+            $parentType,
+            $path,
+            $exeContext->schema,
+            $exeContext->fragments,
+            $exeContext->rootValue,
+            $exeContext->operation,
+            $exeContext->variableValues
+        );
 
         if ($fieldDef->resolveFn !== null) {
             $resolveFn = $fieldDef->resolveFn;
