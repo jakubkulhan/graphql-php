@@ -9,10 +9,10 @@ trait InstructionTrait
 
     public function jsonSerialize()
     {
-        $result = ['kind' => $this->kind];
+        $result = (object)['kind' => $this->kind];
 
         foreach (get_object_vars($this) as $propertyName => $propertyValue) {
-            if (isset($result[$propertyName])) {
+            if (isset($result->{$propertyName})) {
                 continue;
             }
 
@@ -52,7 +52,7 @@ trait InstructionTrait
                 $resultValue = null;
             }
 
-            $result[$propertyName] = $resultValue;
+            $result->{$propertyName} = $resultValue;
         }
 
         return $result;

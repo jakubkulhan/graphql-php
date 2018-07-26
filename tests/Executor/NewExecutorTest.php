@@ -114,7 +114,7 @@ class NewExecutorTest extends \PHPUnit_Framework_TestCase
 
         $ast = Parser::parse($doc);
         $expected = [
-            'data' => (object)[
+            'data' => [
                 'a' => 'Apple',
                 'b' => 'Banana',
                 'x' => 'Cookie',
@@ -122,17 +122,17 @@ class NewExecutorTest extends \PHPUnit_Framework_TestCase
                 'e' => 'Egg',
                 'f' => 'Fish',
                 'pic' => 'Pic of size: 100',
-                'promise' => (object)[
+                'promise' => [
                     'a' => 'Apple'
                 ],
-                'deep' => (object)[
+                'deep' => [
                     'a' => 'Already Been Done',
                     'b' => 'Boring',
                     'c' => ['Contrived', null, 'Confusing'],
                     'deeper' => [
-                        (object)['a' => 'Apple', 'b' => 'Banana'],
+                        ['a' => 'Apple', 'b' => 'Banana'],
                         null,
-                        (object)['a' => 'Apple', 'b' => 'Banana'],
+                        ['a' => 'Apple', 'b' => 'Banana'],
                     ],
                 ],
             ],
@@ -221,14 +221,14 @@ class NewExecutorTest extends \PHPUnit_Framework_TestCase
         ]);
         $schema = new Schema(['query' => $Type]);
         $expected = [
-            'data' => (object)[
+            'data' => [
                 'a' => 'Apple',
                 'b' => 'Banana',
                 'c' => 'Cherry',
-                'deep' => (object)[
+                'deep' => [
                     'b' => 'Banana',
                     'c' => 'Cherry',
-                    'deeper' => (object)[
+                    'deeper' => [
                         'b' => 'Banana',
                         'c' => 'Cherry'
                     ]
