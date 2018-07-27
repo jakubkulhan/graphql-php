@@ -59,15 +59,15 @@
             ],
             "fieldName": "human",
             "resultName": "human",
-            "argumentValueMap": [
-                {
+            "argumentValueMap": {
+                "id": {
                     "kind": "Variable",
                     "name": {
                         "kind": "Name",
                         "value": "id"
                     }
                 }
-            ]
+            }
         }
     ]
 }

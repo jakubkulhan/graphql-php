@@ -20,6 +20,9 @@ use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Introspection;
 use GraphQL\Type\Schema;
 
+/**
+ * @internal
+ */
 class Collector
 {
 
@@ -129,7 +132,7 @@ class Collector
                 continue;
             }
 
-            $emit(new Instruction($fieldNodes, $fieldName, $resultName, $argumentValueMap));
+            $emit($fieldNodes, $fieldName, $resultName, $argumentValueMap);
         }
     }
 

@@ -3,6 +3,7 @@ namespace GraphQL\Executor;
 
 use GraphQL\Error\FormattedError;
 use GraphQL\Language\AST\DocumentNode;
+use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\Node;
 use GraphQL\Language\AST\NodeKind;
 use GraphQL\Language\AST\OperationDefinitionNode;
@@ -10,9 +11,6 @@ use GraphQL\Language\AST\ValueNode;
 use GraphQL\Language\Parser;
 use GraphQL\Tests\StarWarsSchema;
 use GraphQL\Type\Definition\InputType;
-use GraphQL\Type\Definition\ObjectType;
-use GraphQL\Type\Definition\Type;
-use GraphQL\Type\Definition\UnionType;
 use GraphQL\Type\Schema;
 use GraphQL\Utils\AST;
 
@@ -50,8 +48,28 @@ class CollectorTest extends \PHPUnit_Framework_TestCase
         $collector->initialize($documentNode, $operationName);
 
         $pipeline = [];
-        $collector->collectFields($collector->rootType, $collector->operation->selectionSet, function (Instruction $instruction) use (&$pipeline) {
-            $pipeline[] = $instruction;
+        $collector->collectFields($collector->rootType, $collector->operation->selectionSet, function (array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap) use (&$pipeline) {
+            $execution = new \stdClass();
+            if (!empty($fieldNodes)) {
+                $execution->fieldNodes = array_map(function (Node $node) {
+                    return $node->toArray(true);
+                }, $fieldNodes);
+            }
+            if (!empty($fieldName)) {
+                $execution->fieldName = $fieldName;
+            }
+            if (!empty($resultName)) {
+                $execution->resultName = $resultName;
+            }
+            if (!empty($argumentValueMap)) {
+                $execution->argumentValueMap = [];
+                foreach ($argumentValueMap as $argumentName => $valueNode) {
+                    /** @var Node $valueNode */
+                    $execution->argumentValueMap[$argumentName] = $valueNode->toArray(true);
+                }
+            }
+
+            $pipeline[] = $execution;
         });
 
 
@@ -75,7 +93,7 @@ class CollectorTest extends \PHPUnit_Framework_TestCase
             );
         }
         if (!empty($pipeline)) {
-            $result['pipeline'] = array_map(function (Instruction $instruction) { return $instruction->jsonSerialize(); }, $pipeline);
+            $result['pipeline'] = $pipeline;
         }
 
         $json = json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";

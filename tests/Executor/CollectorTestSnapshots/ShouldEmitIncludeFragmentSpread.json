@@ -40,12 +40,12 @@
             ],
             "fieldName": "hero",
             "resultName": "hero",
-            "argumentValueMap": [
-                {
+            "argumentValueMap": {
+                "episode": {
                     "kind": "IntValue",
                     "value": "5"
                 }
-            ]
+            }
         }
     ]
 }

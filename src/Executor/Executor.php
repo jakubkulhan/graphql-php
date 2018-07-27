@@ -9,7 +9,6 @@ use GraphQL\Language\AST\DocumentNode;
 use GraphQL\Language\AST\ValueNode;
 use GraphQL\Type\Definition\InputType;
 use GraphQL\Type\Definition\ResolveInfo;
-use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Schema;
 use GraphQL\Utils\AST;
 
@@ -49,10 +48,10 @@ class Executor implements Runtime
     /** @var Error[] */
     private $errors;
 
-    /** @var \SplDoublyLinkedList */
-    private $pipeline;
+    /** @var \SplQueue */
+    public $pipeline;
 
-    /** @var \SplDoublyLinkedList */
+    /** @var \SplQueue */
     private $schedule;
 
     /** @var \stdClass */
@@ -245,8 +244,8 @@ class Executor implements Runtime
     {
         $this->rootResult = new \stdClass();
         $this->errors = [];
-        $this->pipeline = new \SplDoublyLinkedList();
-        $this->schedule = new \SplDoublyLinkedList();
+        $this->pipeline = new \SplQueue();
+        $this->schedule = new \SplQueue();
         $this->pending = 0;
 
         // TODO: coerce variable values
@@ -258,13 +257,29 @@ class Executor implements Runtime
             return new ExecutionResult(self::resultToArray($this->rootResult), $this->errors);
         }
 
-        $this->collector->collectFields($this->collector->rootType, $this->collector->operation->selectionSet, function (Instruction $instruction) {
-            if ($this->collector->operation->operation === 'mutation' && !$this->pipeline->isEmpty()) {
-                $this->schedule->push($instruction);
-            }
+        $this->collector->collectFields(
+            $this->collector->rootType,
+            $this->collector->operation->selectionSet,
+            function (array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap) {
+                $execution = new Execution(
+                    $this,
+                    $fieldNodes,
+                    $fieldName,
+                    $resultName,
+                    $argumentValueMap,
+                    $this->collector->rootType,
+                    $this->rootValue,
+                    $this->rootResult,
+                    []
+                );
 
-            $this->push($instruction, $this->collector->rootType, $this->rootValue, $this->rootResult, []);
-        });
+                if ($this->collector->operation->operation === 'mutation' && !$this->pipeline->isEmpty()) {
+                    $this->schedule->enqueue($execution);
+                } else {
+                    $this->pipeline->enqueue($execution);
+                }
+            }
+        );
 
         $this->run();
 
@@ -283,44 +298,52 @@ class Executor implements Runtime
         START:
         while (!$this->pipeline->isEmpty()) {
             /** @var Execution $execution */
-            $execution = $this->pipeline->shift();
-
-            $execution->instruction->run(
-                $this,
-                $execution->type,
-                $execution->value,
-                $execution->result,
-                $execution->path
-            );
+            $execution = $this->pipeline->dequeue();
+            $execution->run();
         }
 
-        if (!$this->schedule->isEmpty()) {
-            $this->push($this->schedule->shift(), $this->collector->rootType, $this->rootValue, $this->rootResult, []);
+        if ($this->pending === 0 && !$this->schedule->isEmpty()) {
+            $this->pipeline->enqueue($this->schedule->dequeue());
             goto START;
         }
     }
 
+    /**
+     * @internal
+     */
     public function evaluate(ValueNode $valueNode, InputType $type)
     {
         return AST::valueFromAST($valueNode, $type, $this->variableValues);
     }
 
-    public function push(Instruction $instruction, Type $type, $value, $result, array $path)
+    /**
+     * @internal
+     */
+    public function enqueue(Execution $execution)
     {
-        $this->pipeline->push(new Execution($instruction, $type, $value, $result, $path));
+        $this->pipeline->enqueue($execution);
     }
 
+    /**
+     * @internal
+     */
     public function addError($error)
     {
         $this->errors[] = $error;
     }
 
+    /**
+     * @internal
+     */
     public function waitFor(Promise $promise)
     {
         ++$this->pending;
         $promise->then([$this, 'done'], [$this, 'done']);
     }
 
+    /**
+     * @internal
+     */
     public function done()
     {
         --$this->pending;
