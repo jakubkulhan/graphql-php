@@ -1,0 +1,8 @@
+{
+    "errors": [
+        {
+            "message": "Object type \"Query\" does not have field \"doesNotExist\".",
+            "category": "graphql"
+        }
+    ]
+}

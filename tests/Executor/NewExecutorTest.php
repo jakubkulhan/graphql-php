@@ -536,7 +536,7 @@ class NewExecutorTest extends \PHPUnit_Framework_TestCase
                     'locations' => [['line' => 13, 'column' => 7]],
                     'path' => ['asyncReturnError']
                 ],
-            ]
+            ],
         ];
 
         $result = NewExecutor::execute($schema, $docAst, $data)->toArray();
@@ -855,7 +855,7 @@ class NewExecutorTest extends \PHPUnit_Framework_TestCase
         ...Frag
       }
 
-      fragment Frag on DataType {
+      fragment Frag on Type {
         a,
         ...Frag
       }
@@ -899,7 +899,7 @@ class NewExecutorTest extends \PHPUnit_Framework_TestCase
             ])
         ]);
         $mutationResult = NewExecutor::execute($schema, $ast);
-        $this->assertEquals(['data' => []], $mutationResult->toArray());
+        $this->assertEquals(new \stdClass(), $mutationResult->data);
     }
 
     /**

@@ -156,13 +156,13 @@ class Values
         }
 
         $argumentNodes = $node->arguments;
-        if ($argumentNodes === null) {
+        if (empty($argumentNodes)) {
             return [];
         }
 
-        $argumentValueMap = new \stdClass();
+        $argumentValueMap = [];
         foreach ($argumentNodes as $argumentNode) {
-            $argumentValueMap->{$argumentNode->name->value} = $argumentNode->value;
+            $argumentValueMap[$argumentNode->name->value] = $argumentNode->value;
         }
 
         return static::getArgumentValuesForMap($def, $argumentValueMap, $variableValues, $node);
@@ -170,7 +170,7 @@ class Values
 
     /**
      * @param FieldDefinition|Directive $fieldDefinition
-     * @param object   $argumentValueMap
+     * @param array   $argumentValueMap
      * @param mixed[]                   $variableValues
      * @param Node|null $referenceNode
      * @return mixed[]
@@ -179,7 +179,7 @@ class Values
     public static function getArgumentValuesForMap($fieldDefinition, $argumentValueMap, $variableValues = null, $referenceNode = null)
     {
         $argumentDefinitions  = $fieldDefinition->args;
-        $argumentValueMap = (array)$argumentValueMap;
+        $argumentValueMap = $argumentValueMap;
         $coercedValues = [];
 
         foreach ($argumentDefinitions as $argumentDefinition) {

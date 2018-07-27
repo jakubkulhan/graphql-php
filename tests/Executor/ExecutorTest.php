@@ -831,7 +831,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
         ...Frag
       }
 
-      fragment Frag on DataType {
+      fragment Frag on Type {
         a,
         ...Frag
       }
@@ -875,7 +875,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             ])
         ]);
         $mutationResult = Executor::execute($schema, $ast);
-        $this->assertEquals(['data' => []], $mutationResult->toArray());
+        $this->assertEquals([], $mutationResult->data);
     }
 
     /**

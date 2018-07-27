@@ -2,7 +2,6 @@
 namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
-use GraphQL\Executor\Instruction\Instruction;
 use GraphQL\Executor\Promise\Adapter\SyncPromiseAdapter;
 use GraphQL\Executor\Promise\Promise;
 use GraphQL\Executor\Promise\PromiseAdapter;
@@ -13,7 +12,7 @@ use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Schema;
 use GraphQL\Utils\AST;
 
-class NewExecutor
+class NewExecutor implements Runtime
 {
 
     /** @var callable|string[] */
@@ -24,6 +23,9 @@ class NewExecutor
 
     /** @var Schema */
     public $schema;
+
+    /** @var Collector */
+    public $collector;
 
     /** @var callable */
     public $fieldResolver;
@@ -40,14 +42,14 @@ class NewExecutor
     /** @var mixed|null */
     public $variableValues;
 
-    /** @var CompilationResult */
-    public $compilation;
-
     /** @var Error[] */
     private $errors;
 
     /** @var \SplDoublyLinkedList */
     private $pipeline;
+
+    /** @var \SplDoublyLinkedList */
+    private $schedule;
 
     private $rootResult;
 
@@ -88,12 +90,9 @@ class NewExecutor
                                    $rootValue = null,
                                    $contextValue = null,
                                    $variableValues = null,
-                                   $operationName = null,
+                                   ?string $operationName = null,
                                    ?callable $fieldResolver = null)
     {
-        $compiler = new Compiler($schema);
-        $compilation = $compiler->compile($documentNode, $operationName);
-
         $executor = new static(
             $schema,
             $fieldResolver ?: self::$defaultFieldResolver,
@@ -103,7 +102,7 @@ class NewExecutor
             $variableValues
         );
 
-        $result = $executor->doExecute($compilation);
+        $result = $executor->doExecute($documentNode, $operationName);
 
         if ($executor->promiseAdapter instanceof SyncPromiseAdapter && $result instanceof Promise) {
             $result = $executor->promiseAdapter->wait($result);
@@ -112,25 +111,54 @@ class NewExecutor
         return $result;
     }
 
-    public function doExecute(CompilationResult $compilation)
+    private static function resultToArray($value)
     {
-        $this->compilation = $compilation;
-        $this->errors = $compilation->errors;
+        if (is_object($value)) {
+            $array = [];
+            foreach ($value as $propertyName => $propertyValue) {
+                $array[$propertyName] = self::resultToArray($propertyValue);
+            }
+            if (empty($array)) {
+                return new \stdClass();
+            }
+            return $array;
+
+        } else if (is_array($value)) {
+            $array = [];
+            foreach ($value as $item) {
+                $array[] = self::resultToArray($item);
+            }
+            return $array;
+
+        } else {
+            return $value;
+        }
+    }
+
+    public function doExecute(DocumentNode $documentNode, ?string $operationName)
+    {
+        $this->rootResult = new \stdClass();
+        $this->errors = [];
         $this->pipeline = new \SplDoublyLinkedList();
+        $this->schedule = new \SplDoublyLinkedList();
         $this->pending = 0;
 
         // TODO: coerce variable values
 
-        $rootType = $this->schema->getType($compilation->rootTypeName);
+        $this->collector = new Collector($this->schema, $this);
+        $this->collector->initialize($documentNode, $operationName);
 
-        if ($rootType === $this->schema->getMutationType()) {
-            throw new \LogicException('TODO: implement serial execution');
-        } else {
-            $this->rootResult = new \stdClass();
-            foreach ($compilation->program ?? [] as $instruction) {
-                $this->push($instruction, $rootType, $this->rootValue, $this->rootResult, []);
-            }
+        if (!empty($this->errors)) {
+            return new ExecutionResult(self::resultToArray($this->rootResult), $this->errors);
         }
+
+        $this->collector->collectFields($this->collector->rootType, $this->collector->operation->selectionSet, function (Instruction $instruction) {
+            if ($this->collector->operation->operation === 'mutation' && !$this->pipeline->isEmpty()) {
+                $this->schedule->push($instruction);
+            }
+
+            $this->push($instruction, $this->collector->rootType, $this->rootValue, $this->rootResult, []);
+        });
 
         $this->run();
 
@@ -140,12 +168,13 @@ class NewExecutor
             });
 
         } else {
-            return $this->finish();
+            return new ExecutionResult(self::resultToArray($this->rootResult), $this->errors);
         }
     }
 
     private function run()
     {
+        START:
         while (!$this->pipeline->isEmpty()) {
             /** @var Execution $execution */
             $execution = $this->pipeline->shift();
@@ -158,13 +187,11 @@ class NewExecutor
                 $execution->path
             );
         }
-    }
 
-    private function finish()
-    {
-        $rootResultArray = json_decode(json_encode($this->rootResult), true); // FIXME: oh fuck me, this is ugly...
-
-        return new ExecutionResult($rootResultArray, $this->errors);
+        if (!$this->schedule->isEmpty()) {
+            $this->push($this->schedule->shift(), $this->collector->rootType, $this->rootValue, $this->rootResult, []);
+            goto START;
+        }
     }
 
     public function evaluate(ValueNode $valueNode, InputType $type)
@@ -175,11 +202,6 @@ class NewExecutor
     public function push(Instruction $instruction, Type $type, $value, $result, array $path)
     {
         $this->pipeline->push(new Execution($instruction, $type, $value, $result, $path));
-    }
-
-    public function unshift(Instruction $instruction, Type $type, $value, $result, array $path)
-    {
-        $this->pipeline->unshift(new Execution($instruction, $type, $value, $result, $path));
     }
 
     public function addError($error)
@@ -201,7 +223,7 @@ class NewExecutor
 
         if ($this->pending === 0) {
             $doResolve = $this->doResolve;
-            $doResolve($this->finish());
+            $doResolve(new ExecutionResult(self::resultToArray($this->rootResult), $this->errors));
         }
     }
 

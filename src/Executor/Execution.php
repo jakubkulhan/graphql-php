@@ -1,7 +1,6 @@
 <?php
 namespace GraphQL\Executor;
 
-use GraphQL\Executor\Instruction\Instruction;
 use GraphQL\Type\Definition\Type;
 
 class Execution
