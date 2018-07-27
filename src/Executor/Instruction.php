@@ -24,6 +24,8 @@ use GraphQL\Utils\Utils;
 class Instruction
 {
 
+    private static $undefined;
+
     /** @var FieldNode[] */
     private $fieldNodes;
 
@@ -41,13 +43,17 @@ class Instruction
 
     public function __construct(array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap)
     {
+        if (!isset(self::$undefined)) {
+            self::$undefined = Utils::undefined();
+        }
+
         $this->fieldNodes = $fieldNodes;
         $this->fieldName = $fieldName;
         $this->resultName = $resultName;
         $this->argumentValueMap = $argumentValueMap;
     }
 
-    public function run(NewExecutor $executor, Type $type, $value, $result, array $path)
+    public function run(Executor $executor, Type $type, $value, $result, array $path)
     {
         if ($this->fieldName === Introspection::TYPE_NAME_FIELD_NAME) {
             $result->{$this->resultName} = $type->name;
@@ -105,7 +111,7 @@ class Instruction
         $resume = function ($value) use ($executor, $field, $result, $resolveInfo, $resumeExceptionally) {
             try {
                 $value = $this->finishValue($executor, $field->getType(), $value, $resolveInfo->path, $resolveInfo);
-                if ($value !== Utils::undefined()) {
+                if ($value !== self::$undefined) {
                     $result->{$this->resultName} = $value;
                 }
 
@@ -139,7 +145,7 @@ class Instruction
         }
     }
 
-    private function finishValue(NewExecutor $executor, Type $type, $value, array $resultPath, ResolveInfo $resolveInfo)
+    private function finishValue(Executor $executor, Type $type, $value, array $resultPath, ResolveInfo $resolveInfo)
     {
         if ($value instanceof \Throwable) {
             $executor->addError(new Error(
@@ -164,7 +170,7 @@ class Instruction
                     $resultPath
                 ));
 
-                return Utils::undefined();
+                return self::$undefined;
             }
 
             $value = $this->finishValue($executor, $type->getWrappedType(), $value, $resultPath, $resolveInfo);
@@ -178,7 +184,7 @@ class Instruction
                     $resultPath
                 ));
 
-                return Utils::undefined();
+                return self::$undefined;
             }
 
             return $value;
@@ -197,8 +203,8 @@ class Instruction
                 foreach ($value as $item) {
                     ++$index;
                     $item = $this->finishValue($executor, $type->getWrappedType(), $item, array_merge($resultPath, [$index]), $resolveInfo);
-                    if ($item === Utils::undefined()) {
-                        return Utils::undefined();
+                    if ($item === self::$undefined) {
+                        return self::$undefined;
                     }
                     $list[$index] = $item;
                 }
@@ -225,7 +231,7 @@ class Instruction
                             null,
                             $resultPath
                         ));
-                        return Utils::undefined();
+                        return self::$undefined;
                     }
 
                 } else if ($type instanceof ObjectType) {
@@ -242,7 +248,7 @@ class Instruction
                         null,
                         $resultPath
                     ));
-                    return Utils::undefined();
+                    return self::$undefined;
                 }
 
                 $typeCheck = $objectType->isTypeOf($value, $executor->contextValue, $resolveInfo);
@@ -281,7 +287,7 @@ class Instruction
                     $resultPath
                 ));
 
-                return Utils::undefined();
+                return self::$undefined;
             }
         }
     }

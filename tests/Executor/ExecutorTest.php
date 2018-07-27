@@ -4,19 +4,19 @@ namespace GraphQL\Tests\Executor;
 require_once __DIR__ . '/TestClasses.php';
 
 use GraphQL\Deferred;
-use GraphQL\Error\Error;
 use GraphQL\Error\UserError;
 use GraphQL\Executor\Executor;
 use GraphQL\Language\Parser;
-use GraphQL\Type\Schema;
 use GraphQL\Type\Definition\InputObjectType;
 use GraphQL\Type\Definition\InterfaceType;
 use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\ResolveInfo;
 use GraphQL\Type\Definition\Type;
+use GraphQL\Type\Schema;
 
 class ExecutorTest extends \PHPUnit_Framework_TestCase
 {
+
     public function tearDown()
     {
         Executor::setPromiseAdapter(null);
@@ -39,16 +39,26 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
         };
 
         $data = [
-            'a' => function () { return 'Apple';},
-            'b' => function () {return 'Banana';},
-            'c' => function () {return 'Cookie';},
-            'd' => function () {return 'Donut';},
-            'e' => function () {return 'Egg';},
+            'a' => function () {
+                return 'Apple';
+            },
+            'b' => function () {
+                return 'Banana';
+            },
+            'c' => function () {
+                return 'Cookie';
+            },
+            'd' => function () {
+                return 'Donut';
+            },
+            'e' => function () {
+                return 'Egg';
+            },
             'f' => 'Fish',
             'pic' => function ($size = 50) {
                 return 'Pic of size: ' . $size;
             },
-            'promise' => function() use ($promiseData) {
+            'promise' => function () use ($promiseData) {
                 return $promiseData();
             },
             'deep' => function () use (&$deepData) {
@@ -57,8 +67,12 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
         ];
 
         $deepData = [
-            'a' => function () { return 'Already Been Done'; },
-            'b' => function () { return 'Boring'; },
+            'a' => function () {
+                return 'Already Been Done';
+            },
+            'b' => function () {
+                return 'Boring';
+            },
             'c' => function () {
                 return ['Contrived', null, 'Confusing'];
             },
@@ -114,31 +128,31 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                 'deep' => [
                     'a' => 'Already Been Done',
                     'b' => 'Boring',
-                    'c' => [ 'Contrived', null, 'Confusing' ],
+                    'c' => ['Contrived', null, 'Confusing'],
                     'deeper' => [
-                        [ 'a' => 'Apple', 'b' => 'Banana' ],
+                        ['a' => 'Apple', 'b' => 'Banana'],
                         null,
-                        [ 'a' => 'Apple', 'b' => 'Banana' ]
-                    ]
-                ]
-            ]
+                        ['a' => 'Apple', 'b' => 'Banana'],
+                    ],
+                ],
+            ],
         ];
 
         $deepDataType = null;
         $dataType = new ObjectType([
             'name' => 'DataType',
-            'fields' => function() use (&$dataType, &$deepDataType) {
+            'fields' => function () use (&$dataType, &$deepDataType) {
                 return [
-                    'a' => [ 'type' => Type::string() ],
-                    'b' => [ 'type' => Type::string() ],
-                    'c' => [ 'type' => Type::string() ],
-                    'd' => [ 'type' => Type::string() ],
-                    'e' => [ 'type' => Type::string() ],
-                    'f' => [ 'type' => Type::string() ],
+                    'a' => ['type' => Type::string()],
+                    'b' => ['type' => Type::string()],
+                    'c' => ['type' => Type::string()],
+                    'd' => ['type' => Type::string()],
+                    'e' => ['type' => Type::string()],
+                    'f' => ['type' => Type::string()],
                     'pic' => [
-                        'args' => [ 'size' => ['type' => Type::int() ] ],
+                        'args' => ['size' => ['type' => Type::int()]],
                         'type' => Type::string(),
-                        'resolve' => function($obj, $args) {
+                        'resolve' => function ($obj, $args) {
                             return $obj['pic']($args['size']);
                         }
                     ],
@@ -151,15 +165,17 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
         $deepDataType = new ObjectType([
             'name' => 'DeepDataType',
             'fields' => [
-                'a' => [ 'type' => Type::string() ],
-                'b' => [ 'type' => Type::string() ],
-                'c' => [ 'type' => Type::listOf(Type::string()) ],
-                'deeper' => [ 'type' => Type::listOf($dataType) ]
+                'a' => ['type' => Type::string()],
+                'b' => ['type' => Type::string()],
+                'c' => ['type' => Type::listOf(Type::string())],
+                'deeper' => ['type' => Type::listOf($dataType)]
             ]
         ]);
         $schema = new Schema(['query' => $dataType]);
 
-        $this->assertEquals($expected, Executor::execute($schema, $ast, $data, null, ['size' => 100], 'Example')->toArray());
+        $result = Executor::execute($schema, $ast, $data, null, ['size' => 100], 'Example');
+
+        $this->assertEquals($expected, $result->toArray());
     }
 
     /**
@@ -183,7 +199,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
 
         $Type = new ObjectType([
             'name' => 'Type',
-            'fields' => function() use (&$Type) {
+            'fields' => function () use (&$Type) {
                 return [
                     'a' => ['type' => Type::string(), 'resolve' => function () {
                         return 'Apple';
@@ -238,7 +254,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                 'fields' => [
                     'test' => [
                         'type' => Type::string(),
-                        'resolve' => function($val, $args, $ctx, $_info) use (&$info) {
+                        'resolve' => function ($val, $args, $ctx, $_info) use (&$info) {
                             $info = $_info;
                         }
                     ]
@@ -246,9 +262,9 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             ])
         ]);
 
-        $rootValue = [ 'root' => 'val' ];
+        $rootValue = ['root' => 'val'];
 
-        Executor::execute($schema, $ast, $rootValue, null, [ 'var' => '123' ]);
+        Executor::execute($schema, $ast, $rootValue, null, ['var' => '123']);
 
         $this->assertEquals([
             'fieldName',
@@ -261,7 +277,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             'rootValue',
             'operation',
             'variableValues',
-        ], array_keys((array) $info));
+        ], array_keys((array)$info));
 
         $this->assertEquals('test', $info->fieldName);
         $this->assertEquals(1, count($info->fieldNodes));
@@ -373,12 +389,12 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             'syncError' => function () {
                 throw new UserError('Error getting syncError');
             },
-            'syncRawError' => function() {
+            'syncRawError' => function () {
                 throw new UserError('Error getting syncRawError');
             },
             // inherited from JS reference implementation, but make no sense in this PHP impl
             // leaving it just to simplify migrations from newer js versions
-            'syncReturnError' => function() {
+            'syncReturnError' => function () {
                 return new UserError('Error getting syncReturnError');
             },
             'syncReturnErrorList' => function () {
@@ -389,36 +405,40 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                     new UserError('Error getting syncReturnErrorList3')
                 ];
             },
-            'async' => function() {
-                return new Deferred(function() { return 'async'; });
+            'async' => function () {
+                return new Deferred(function () {
+                    return 'async';
+                });
             },
-            'asyncReject' => function() {
-                return new Deferred(function() { throw new UserError('Error getting asyncReject'); });
+            'asyncReject' => function () {
+                return new Deferred(function () {
+                    throw new UserError('Error getting asyncReject');
+                });
             },
             'asyncRawReject' => function () {
-                return new Deferred(function() {
+                return new Deferred(function () {
                     throw new UserError('Error getting asyncRawReject');
                 });
             },
             'asyncEmptyReject' => function () {
-                return new Deferred(function() {
+                return new Deferred(function () {
                     throw new UserError();
                 });
             },
-            'asyncError' => function() {
-                return new Deferred(function() {
+            'asyncError' => function () {
+                return new Deferred(function () {
                     throw new UserError('Error getting asyncError');
                 });
             },
             // inherited from JS reference implementation, but make no sense in this PHP impl
             // leaving it just to simplify migrations from newer js versions
-            'asyncRawError' => function() {
-                return new Deferred(function() {
+            'asyncRawError' => function () {
+                return new Deferred(function () {
                     throw new UserError('Error getting asyncRawError');
                 });
             },
-            'asyncReturnError' => function() {
-                return new Deferred(function() {
+            'asyncReturnError' => function () {
+                return new Deferred(function () {
                     throw new UserError('Error getting asyncReturnError');
                 });
             },
@@ -435,9 +455,9 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                     'syncReturnError' => ['type' => Type::string()],
                     'syncReturnErrorList' => ['type' => Type::listOf(Type::string())],
                     'async' => ['type' => Type::string()],
-                    'asyncReject' => ['type' => Type::string() ],
-                    'asyncRawReject' => ['type' => Type::string() ],
-                    'asyncEmptyReject' => ['type' => Type::string() ],
+                    'asyncReject' => ['type' => Type::string()],
+                    'asyncRawReject' => ['type' => Type::string()],
+                    'asyncEmptyReject' => ['type' => Type::string()],
                     'asyncError' => ['type' => Type::string()],
                     'asyncRawError' => ['type' => Type::string()],
                     'asyncReturnError' => ['type' => Type::string()],
@@ -468,8 +488,8 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                 ],
                 [
                     'message' => 'Error getting syncRawError',
-                    'locations' => [ [ 'line' => 4, 'column' => 7 ] ],
-                    'path'=> [ 'syncRawError' ]
+                    'locations' => [['line' => 4, 'column' => 7]],
+                    'path' => ['syncRawError']
                 ],
                 [
                     'message' => 'Error getting syncReturnError',
@@ -508,15 +528,15 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                 ],
                 [
                     'message' => 'Error getting asyncRawError',
-                    'locations' => [ [ 'line' => 12, 'column' => 7 ] ],
-                    'path' => [ 'asyncRawError' ]
+                    'locations' => [['line' => 12, 'column' => 7]],
+                    'path' => ['asyncRawError']
                 ],
                 [
                     'message' => 'Error getting asyncReturnError',
                     'locations' => [['line' => 13, 'column' => 7]],
                     'path' => ['asyncReturnError']
                 ],
-            ]
+            ],
         ];
 
         $result = Executor::execute($schema, $docAst, $data)->toArray();
@@ -552,13 +572,13 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
     public function testUsesTheOnlyOperationIfNoOperationIsProvided()
     {
         $doc = 'query Example { a }';
-        $data = [ 'a' => 'b' ];
+        $data = ['a' => 'b'];
         $ast = Parser::parse($doc);
         $schema = new Schema([
             'query' => new ObjectType([
                 'name' => 'Type',
                 'fields' => [
-                    'a' => [ 'type' => Type::string() ],
+                    'a' => ['type' => Type::string()],
                 ]
             ])
         ]);
@@ -573,13 +593,13 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
     public function testUsesTheNamedOperationIfOperationNameIsProvided()
     {
         $doc = 'query Example { first: a } query OtherExample { second: a }';
-        $data = [ 'a' => 'b' ];
+        $data = ['a' => 'b'];
         $ast = Parser::parse($doc);
         $schema = new Schema([
             'query' => new ObjectType([
                 'name' => 'Type',
                 'fields' => [
-                    'a' => [ 'type' => Type::string() ],
+                    'a' => ['type' => Type::string()],
                 ]
             ])
         ]);
@@ -594,13 +614,13 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
     public function testProvidesErrorIfNoOperationIsProvided()
     {
         $doc = 'fragment Example on Type { a }';
-        $data = [ 'a' => 'b' ];
+        $data = ['a' => 'b'];
         $ast = Parser::parse($doc);
         $schema = new Schema([
             'query' => new ObjectType([
                 'name' => 'Type',
                 'fields' => [
-                    'a' => [ 'type' => Type::string() ],
+                    'a' => ['type' => Type::string()],
                 ]
             ])
         ]);
@@ -718,7 +738,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
     public function testUsesTheMutationSchemaForMutations()
     {
         $doc = 'query Q { a } mutation M { c }';
-        $data = [ 'a' => 'b', 'c' => 'd' ];
+        $data = ['a' => 'b', 'c' => 'd'];
         $ast = Parser::parse($doc);
         $schema = new Schema([
             'query' => new ObjectType([
@@ -730,7 +750,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             'mutation' => new ObjectType([
                 'name' => 'M',
                 'fields' => [
-                    'c' => [ 'type' => Type::string() ],
+                    'c' => ['type' => Type::string()],
                 ]
             ])
         ]);
@@ -744,19 +764,19 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
     public function testUsesTheSubscriptionSchemaForSubscriptions()
     {
         $doc = 'query Q { a } subscription S { a }';
-        $data = [ 'a' => 'b', 'c' => 'd' ];
+        $data = ['a' => 'b', 'c' => 'd'];
         $ast = Parser::parse($doc);
         $schema = new Schema([
             'query' => new ObjectType([
                 'name' => 'Q',
                 'fields' => [
-                    'a' => [ 'type' => Type::string() ],
+                    'a' => ['type' => Type::string()],
                 ]
             ]),
             'subscription' => new ObjectType([
                 'name' => 'S',
                 'fields' => [
-                    'a' => [ 'type' => Type::string() ],
+                    'a' => ['type' => Type::string()],
                 ]
             ])
         ]);
@@ -779,13 +799,17 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                 return 'a';
             },
             'b' => function () {
-                return new Deferred(function () { return 'b'; });
+                return new Deferred(function () {
+                    return 'b';
+                });
             },
             'c' => function () {
                 return 'c';
             },
             'd' => function () {
-                return new Deferred(function () { return 'd'; });
+                return new Deferred(function () {
+                    return 'd';
+                });
             },
             'e' => function () {
                 return 'e';
@@ -797,11 +821,11 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
         $queryType = new ObjectType([
             'name' => 'DeepDataType',
             'fields' => [
-                'a' => [ 'type' => Type::string() ],
-                'b' => [ 'type' => Type::string() ],
-                'c' => [ 'type' => Type::string() ],
-                'd' => [ 'type' => Type::string() ],
-                'e' => [ 'type' => Type::string() ],
+                'a' => ['type' => Type::string()],
+                'b' => ['type' => Type::string()],
+                'c' => ['type' => Type::string()],
+                'd' => ['type' => Type::string()],
+                'e' => ['type' => Type::string()],
             ]
         ]);
         $schema = new Schema(['query' => $queryType]);
@@ -875,7 +899,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             ])
         ]);
         $mutationResult = Executor::execute($schema, $ast);
-        $this->assertEquals([], $mutationResult->data);
+        $this->assertEquals(new \stdClass(), $mutationResult->data);
     }
 
     /**
@@ -889,7 +913,9 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                 'fields' => [
                     'field' => [
                         'type' => Type::string(),
-                        'resolve' => function($data, $args) {return $args ? json_encode($args) : '';},
+                        'resolve' => function ($data, $args) {
+                            return $args ? json_encode($args) : '';
+                        },
                         'args' => [
                             'a' => ['type' => Type::boolean()],
                             'b' => ['type' => Type::boolean()],
@@ -920,7 +946,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
     {
         $SpecialType = new ObjectType([
             'name' => 'SpecialType',
-            'isTypeOf' => function($obj) {
+            'isTypeOf' => function ($obj) {
                 return $obj instanceof Special;
             },
             'fields' => [
@@ -934,7 +960,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                 'fields' => [
                     'specials' => [
                         'type' => Type::listOf($SpecialType),
-                        'resolve' => function($rootValue) {
+                        'resolve' => function ($rootValue) {
                             return $rootValue['specials'];
                         }
                     ]
@@ -944,7 +970,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
 
         $query = Parser::parse('{ specials { value } }');
         $value = [
-            'specials' => [ new Special('foo'), new NotSpecial('bar') ]
+            'specials' => [new Special('foo'), new NotSpecial('bar')]
         ];
         $result = Executor::execute($schema, $query, $value);
 
@@ -1041,7 +1067,9 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
                 'fields' => [
                     'field' => [
                         'type' => Type::string(),
-                        'resolve' => function($data, $args) {return $args ? json_encode($args) : '';},
+                        'resolve' => function ($data, $args) {
+                            return $args ? json_encode($args) : '';
+                        },
                         'args' => [
                             'a' => ['type' => Type::boolean(), 'defaultValue' => 1],
                             'b' => ['type' => Type::boolean(), 'defaultValue' => null],
@@ -1086,7 +1114,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             'fields' => [
                 'id' => Type::id()
             ],
-            'interfaces' => function() use (&$iface) {
+            'interfaces' => function () use (&$iface) {
                 return [$iface];
             }
         ]);
@@ -1096,7 +1124,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             'fields' => [
                 'id' => Type::id()
             ],
-            'interfaces' => function() use (&$iface) {
+            'interfaces' => function () use (&$iface) {
                 return [$iface];
             }
         ]);
@@ -1106,7 +1134,7 @@ class ExecutorTest extends \PHPUnit_Framework_TestCase
             'fields' => [
                 'id' => Type::id()
             ],
-            'resolveType' => function($v) use ($a, $b) {
+            'resolveType' => function ($v) use ($a, $b) {
                 return $v['type'] === 'A' ? $a : $b;
             }
         ]);
