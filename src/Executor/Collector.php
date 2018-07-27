@@ -118,12 +118,15 @@ class Collector
                 }
             }
 
-            if ($fieldName !== Introspection::TYPE_NAME_FIELD_NAME && !$runtimeType->hasField($fieldName)) {
+            if ($fieldName !== Introspection::TYPE_NAME_FIELD_NAME &&
+                !($runtimeType === $this->schema->getQueryType() && ($fieldName === Introspection::SCHEMA_FIELD_NAME || $fieldName === Introspection::TYPE_FIELD_NAME)) &&
+                !$runtimeType->hasField($fieldName)
+            ) {
                 $this->runtime->addError(new Error(
                     sprintf('Object type "%s" does not have field "%s".', $runtimeType->name, $fieldName),
                     $fieldNode
                 ));
-                return;
+                continue;
             }
 
             $emit(new Instruction($fieldNodes, $fieldName, $resultName, $argumentValueMap));
@@ -216,7 +219,6 @@ class Collector
 
                 $fragmentDefinition = $this->fragments[$fragmentName];
                 $conditionTypeName = $fragmentDefinition->typeCondition->name->value;
-                $selectionSet = $fragmentDefinition->selectionSet;
 
                 if (!$this->schema->hasType($conditionTypeName)) {
                     $this->runtime->addError(new Error(
@@ -238,35 +240,36 @@ class Collector
                     }
                 }
 
-                $this->doCollectFields($runtimeType, $selectionSet);
+                $this->doCollectFields($runtimeType, $fragmentDefinition->selectionSet);
 
             } else if ($selection->kind === NodeKind::INLINE_FRAGMENT) {
                 /** @var InlineFragmentNode $selection */
 
-                $conditionTypeName = $selection->typeCondition->name->value;
-                $selectionSet = $selection->selectionSet;
+                if ($selection->typeCondition !== null) {
+                    $conditionTypeName = $selection->typeCondition->name->value;
 
-                if (!$this->schema->hasType($conditionTypeName)) {
-                    $this->runtime->addError(new Error(
-                        sprintf('Cannot spread inline fragment, type "%s" does not exist.', $conditionTypeName),
-                        $selection
-                    ));
-                    continue;
-                }
-
-                $conditionType = $this->schema->getType($conditionTypeName);
-
-                if ($conditionType instanceof ObjectType) {
-                    if ($runtimeType->name !== $conditionType->name) {
-                        return;
-                    }
-                } else if ($conditionType instanceof AbstractType) {
-                    if (!$this->schema->isPossibleType($conditionType, $runtimeType)) {
+                    if (!$this->schema->hasType($conditionTypeName)) {
+                        $this->runtime->addError(new Error(
+                            sprintf('Cannot spread inline fragment, type "%s" does not exist.', $conditionTypeName),
+                            $selection
+                        ));
                         continue;
                     }
+
+                    $conditionType = $this->schema->getType($conditionTypeName);
+
+                    if ($conditionType instanceof ObjectType) {
+                        if ($runtimeType->name !== $conditionType->name) {
+                            return;
+                        }
+                    } else if ($conditionType instanceof AbstractType) {
+                        if (!$this->schema->isPossibleType($conditionType, $runtimeType)) {
+                            continue;
+                        }
+                    }
                 }
 
-                $this->doCollectFields($runtimeType, $selectionSet);
+                $this->doCollectFields($runtimeType, $selection->selectionSet);
             }
         }
     }

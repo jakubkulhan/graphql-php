@@ -10,6 +10,7 @@ use GraphQL\Language\AST\NodeList;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Language\AST\ValueNode;
 use GraphQL\Type\Definition\CompositeType;
+use GraphQL\Type\Definition\FieldDefinition;
 use GraphQL\Type\Definition\InterfaceType;
 use GraphQL\Type\Definition\LeafType;
 use GraphQL\Type\Definition\ListOfType;
@@ -53,62 +54,39 @@ class Instruction
         $this->argumentValueMap = $argumentValueMap;
     }
 
-    public function run(Executor $executor, Type $type, $value, $result, array $path)
+    public function run(Executor $executor, ObjectType $type, $value, $result, array $path)
     {
         if ($this->fieldName === Introspection::TYPE_NAME_FIELD_NAME) {
             $result->{$this->resultName} = $type->name;
             return;
         }
 
-        /** @var ObjectType $type */
+        /** @var FieldDefinition|null $field */
+        $field = null;
+        /** @var ResolveInfo|null $resolveInfo */
+        $resolveInfo = null;
+        $resultPath = array_merge($path, [$this->resultName]);
 
-        $field = $type->getField($this->fieldName);
-
-        if ($field->resolveFn !== null) {
-            $resolve = $field->resolveFn;
-        } elseif ($type->resolveFieldFn !== null) {
-            $resolve = $type->resolveFieldFn;
-        } else {
-            $resolve = $executor->fieldResolver;
-        }
-
-        $args = Values::getArgumentValuesForMap(
-            $field,
-            $this->argumentValueMap,
-            $executor->variableValues
-        );
-
-        $resolveInfo = new ResolveInfo(
-            $this->fieldName,
-            $this->fieldNodes,
-            $field->getType(),
-            $type,
-            array_merge($path, [$this->resultName]),
-            $executor->schema,
-            $executor->collector->fragments,
-            $executor->rootValue,
-            $executor->collector->operation,
-            $executor->variableValues
-        );
-
-        $resumeExceptionally = function (\Throwable $reason) use ($executor, $field, $type, $result, $resolveInfo) {
+        $resumeExceptionally = function (\Throwable $reason) use ($executor, &$field, $result, $resultPath) {
             $executor->addError(new Error(
                 $reason->getMessage() ?: 'An unknown error occurred.',
                 $this->fieldNodes,
                 null,
                 null,
-                $resolveInfo->path,
+                $resultPath,
                 $reason
             ));
 
-            if ($field->getType() instanceof NonNull) {
-                // FIXME: null parent
-            } else {
-                $result->{$this->resultName} = null;
+            if ($field !== null) {
+                if ($field->getType() instanceof NonNull) {
+                    // FIXME: null parent
+                } else {
+                    $result->{$this->resultName} = null;
+                }
             }
         };
 
-        $resume = function ($value) use ($executor, $field, $result, $resolveInfo, $resumeExceptionally) {
+        $resume = function ($value) use ($executor, &$field, $result, &$resolveInfo, $resumeExceptionally) {
             try {
                 $value = $this->finishValue($executor, $field->getType(), $value, $resolveInfo->path, $resolveInfo);
                 if ($value !== self::$undefined) {
@@ -121,7 +99,42 @@ class Instruction
         };
 
         try {
-            $resolvedValue = $resolve($value, $args, $executor->contextValue, $resolveInfo);
+            if ($this->fieldName === Introspection::SCHEMA_FIELD_NAME && $type === $executor->schema->getQueryType()) {
+                $field = Introspection::schemaMetaFieldDef();
+            } else if ($this->fieldName === Introspection::TYPE_FIELD_NAME && $type === $executor->schema->getQueryType()) {
+                $field = Introspection::typeMetaFieldDef();
+            } else {
+                $field = $type->getField($this->fieldName);
+            }
+
+            if ($field->resolveFn !== null) {
+                $resolve = $field->resolveFn;
+            } elseif ($type->resolveFieldFn !== null) {
+                $resolve = $type->resolveFieldFn;
+            } else {
+                $resolve = $executor->fieldResolver;
+            }
+
+            $arguments = Values::getArgumentValuesForMap(
+                $field,
+                $this->argumentValueMap,
+                $executor->variableValues
+            );
+
+            $resolveInfo = new ResolveInfo(
+                $this->fieldName,
+                $this->fieldNodes,
+                $field->getType(),
+                $type,
+                $resultPath,
+                $executor->schema,
+                $executor->collector->fragments,
+                $executor->rootValue,
+                $executor->collector->operation,
+                $executor->variableValues
+            );
+
+            $resolvedValue = $resolve($value, $arguments, $executor->contextValue, $resolveInfo);
 
             if ($executor->promiseAdapter->isThenable($resolvedValue)) {
                 $promise = $executor->promiseAdapter->convertThenable($resolvedValue);

@@ -121,7 +121,24 @@ class Executor implements Runtime
                                    ?string $operationName = null,
                                    ?callable $fieldResolver = null)
     {
-        return static::promiseToExecute(static::getPromiseAdapter(), $schema, $documentNode, $rootValue, $contextValue, $variableValues, $operationName, $fieldResolver);
+        $promiseAdapter = static::getPromiseAdapter();
+
+        $result = static::promiseToExecute(
+            $promiseAdapter,
+            $schema,
+            $documentNode,
+            $rootValue,
+            $contextValue,
+            $variableValues,
+            $operationName,
+            $fieldResolver
+        );
+
+        if ($promiseAdapter instanceof SyncPromiseAdapter) {
+            $result = $promiseAdapter->wait($result);
+        }
+
+        return $result;
     }
 
     /**
@@ -140,7 +157,7 @@ class Executor implements Runtime
      * @param string|null $operationName
      * @param callable|null $fieldResolver
      *
-     * @return ExecutionResult|Promise
+     * @return Promise
      */
     public static function promiseToExecute(PromiseAdapter $promiseAdapter,
                                             Schema $schema,
@@ -162,11 +179,11 @@ class Executor implements Runtime
 
         $result = $executor->doExecute($documentNode, $operationName);
 
-        if ($executor->promiseAdapter instanceof SyncPromiseAdapter && $result instanceof Promise) {
-            $result = $executor->promiseAdapter->wait($result);
+        if ($result instanceof Promise) {
+            return $result;
+        } else {
+            return $promiseAdapter->createFulfilled($result);
         }
-
-        return $result;
     }
 
     /**

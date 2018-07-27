@@ -35,6 +35,8 @@ class TypeKind {
 class Introspection
 {
 
+    const SCHEMA_FIELD_NAME = '__schema';
+    const TYPE_FIELD_NAME = '__type';
     const TYPE_NAME_FIELD_NAME = '__typename';
 
     private static $map = [];
@@ -667,9 +669,9 @@ EOD;
 
     public static function schemaMetaFieldDef()
     {
-        if (!isset(self::$map['__schema'])) {
-            self::$map['__schema'] = FieldDefinition::create([
-                'name' => '__schema',
+        if (!isset(self::$map[self::SCHEMA_FIELD_NAME])) {
+            self::$map[self::SCHEMA_FIELD_NAME] = FieldDefinition::create([
+                'name' => self::SCHEMA_FIELD_NAME,
                 'type' => Type::nonNull(self::_schema()),
                 'description' => 'Access the current type schema of this server.',
                 'args' => [],
@@ -683,14 +685,14 @@ EOD;
                 }
             ]);
         }
-        return self::$map['__schema'];
+        return self::$map[self::SCHEMA_FIELD_NAME];
     }
 
     public static function typeMetaFieldDef()
     {
-        if (!isset(self::$map['__type'])) {
-            self::$map['__type'] = FieldDefinition::create([
-                'name' => '__type',
+        if (!isset(self::$map[self::TYPE_FIELD_NAME])) {
+            self::$map[self::TYPE_FIELD_NAME] = FieldDefinition::create([
+                'name' => self::TYPE_FIELD_NAME,
                 'type' => self::_type(),
                 'description' => 'Request the type information of a single type.',
                 'args' => [
@@ -701,7 +703,7 @@ EOD;
                 }
             ]);
         }
-        return self::$map['__type'];
+        return self::$map[self::TYPE_FIELD_NAME];
     }
 
     public static function typeNameMetaFieldDef()
