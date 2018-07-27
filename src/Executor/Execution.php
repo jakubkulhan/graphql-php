@@ -61,6 +61,9 @@ class Execution
     /** @var ResolveInfo|null */
     private $resolveInfo;
 
+    /** @var \stdClass */
+    private $cachedExecutions;
+
     public function __construct(Executor $executor, array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap, ObjectType $type, $value, $result, $parentPath)
     {
         if (!isset(self::$undefined)) {
@@ -76,6 +79,7 @@ class Execution
         $this->value = $value;
         $this->result = $result;
         $this->parentPath = $parentPath;
+        $this->cachedExecutions = new \stdClass();
     }
 
     public function run()
@@ -304,29 +308,49 @@ class Execution
                 }
 
                 $result = new \stdClass();
-                $this->executor->collector->collectFields(
-                    $objectType,
-                    $this->mergeSelectionSets(),
-                    function (array $fieldNodes,
-                              string $fieldName,
-                              string $resultName,
-                              ?array $argumentValueMap) use ($objectType, $value, $result, $resultPath) {
 
-                        $execution = new Execution(
-                            $this->executor,
-                            $fieldNodes,
-                            $fieldName,
-                            $resultName,
-                            $argumentValueMap,
-                            $objectType,
-                            $value,
-                            $result,
-                            $resultPath
-                        );
+                $cacheKey = spl_object_hash($objectType);
+                if (isset($this->cachedExecutions->{$cacheKey})) {
+                    foreach ($this->cachedExecutions->{$cacheKey} as $execution) {
+                        /** @var Execution $execution */
+                        $execution = clone $execution;
+                        $execution->type = $objectType;
+                        $execution->value = $value;
+                        $execution->result = $result;
+                        $execution->parentPath = $resultPath;
 
                         $this->executor->enqueue($execution);
                     }
-                );
+
+                } else {
+                    $this->cachedExecutions->{$cacheKey} = [];
+
+                    $this->executor->collector->collectFields(
+                        $objectType,
+                        $this->mergeSelectionSets(),
+                        function (array $fieldNodes,
+                                  string $fieldName,
+                                  string $resultName,
+                                  ?array $argumentValueMap) use ($objectType, $value, $result, $resultPath, $cacheKey) {
+
+                            $execution = new Execution(
+                                $this->executor,
+                                $fieldNodes,
+                                $fieldName,
+                                $resultName,
+                                $argumentValueMap,
+                                $objectType,
+                                $value,
+                                $result,
+                                $resultPath
+                            );
+
+                            $this->cachedExecutions->{$cacheKey}[] = $execution;
+
+                            $this->executor->enqueue($execution);
+                        }
+                    );
+                }
 
                 return $result;
 
