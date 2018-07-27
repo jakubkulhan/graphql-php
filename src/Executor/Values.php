@@ -183,7 +183,6 @@ class Values
     public static function getArgumentValuesForMap($fieldDefinition, $argumentValueMap, $variableValues = null, $referenceNode = null)
     {
         $argumentDefinitions  = $fieldDefinition->args;
-        $argumentValueMap = $argumentValueMap;
         $coercedValues = [];
 
         foreach ($argumentDefinitions as $argumentDefinition) {

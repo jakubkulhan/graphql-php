@@ -4,9 +4,7 @@ namespace GraphQL\Executor;
 use GraphQL\Error\Error;
 use GraphQL\Error\InvariantViolation;
 use GraphQL\Executor\Promise\Promise;
-use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\SelectionSetNode;
-use GraphQL\Language\AST\ValueNode;
 use GraphQL\Type\Definition\CompositeType;
 use GraphQL\Type\Definition\FieldDefinition;
 use GraphQL\Type\Definition\InterfaceType;
@@ -31,17 +29,8 @@ class Execution
     /** @var Executor */
     private $executor;
 
-    /** @var FieldNode[] */
-    private $fieldNodes;
-
-    /** @var string */
-    private $fieldName;
-
-    /** @var string */
-    private $resultName;
-
-    /** @var ValueNode[]|null */
-    private $argumentValueMap;
+    /** @var ExecutionSharedState */
+    private $shared;
 
     /** @var ObjectType */
     private $type;
@@ -61,9 +50,6 @@ class Execution
     /** @var ResolveInfo|null */
     private $resolveInfo;
 
-    /** @var \stdClass */
-    private $cachedExecutions;
-
     public function __construct(Executor $executor, array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap, ObjectType $type, $value, $result, $parentPath)
     {
         if (!isset(self::$undefined)) {
@@ -71,34 +57,29 @@ class Execution
         }
 
         $this->executor = $executor;
-        $this->fieldNodes = $fieldNodes;
-        $this->fieldName = $fieldName;
-        $this->resultName = $resultName;
-        $this->argumentValueMap = $argumentValueMap;
+        $this->shared = new ExecutionSharedState($fieldNodes, $fieldName, $resultName, $argumentValueMap);
         $this->type = $type;
         $this->value = $value;
         $this->result = $result;
         $this->parentPath = $parentPath;
-        $this->cachedExecutions = new \stdClass();
     }
 
     public function run()
     {
-        if ($this->fieldName === Introspection::TYPE_NAME_FIELD_NAME) {
-            $this->result->{$this->resultName} = $this->type->name;
+        if ($this->shared->fieldName === Introspection::TYPE_NAME_FIELD_NAME) {
+            $this->result->{$this->shared->resultName} = $this->type->name;
             return;
         }
 
-        $this->fieldDefinition = null;
         $this->resolveInfo = null;
 
         try {
-            if ($this->fieldName === Introspection::SCHEMA_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
+            if ($this->shared->fieldName === Introspection::SCHEMA_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
                 $this->fieldDefinition = Introspection::schemaMetaFieldDef();
-            } else if ($this->fieldName === Introspection::TYPE_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
+            } else if ($this->shared->fieldName === Introspection::TYPE_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
                 $this->fieldDefinition = Introspection::typeMetaFieldDef();
             } else {
-                $this->fieldDefinition = $this->type->getField($this->fieldName);
+                $this->fieldDefinition = $this->type->getField($this->shared->fieldName);
             }
 
             if ($this->fieldDefinition->resolveFn !== null) {
@@ -109,18 +90,23 @@ class Execution
                 $resolve = $this->executor->fieldResolver;
             }
 
-            $arguments = Values::getArgumentValuesForMap(
-                $this->fieldDefinition,
-                $this->argumentValueMap,
-                $this->executor->variableValues
-            );
+            $cacheKey = spl_object_hash($this->fieldDefinition);
+            if (isset($this->shared->arguments->{$cacheKey})) {
+                $arguments = $this->shared->arguments->{$cacheKey};
+            } else {
+                $arguments = $this->shared->arguments->{$cacheKey} = Values::getArgumentValuesForMap(
+                    $this->fieldDefinition,
+                    $this->shared->argumentValueMap,
+                    $this->executor->variableValues
+                );
+            }
 
             $this->resolveInfo = new ResolveInfo(
-                $this->fieldName,
-                $this->fieldNodes,
+                $this->shared->fieldName,
+                $this->shared->fieldNodes,
                 $this->fieldDefinition->getType(),
                 $this->type,
-                array_merge($this->parentPath, [$this->resultName]),
+                array_merge($this->parentPath, [$this->shared->resultName]),
                 $this->executor->schema,
                 $this->executor->collector->fragments,
                 $this->executor->rootValue,
@@ -157,7 +143,7 @@ class Execution
         try {
             $value = $this->finishValue($this->fieldDefinition->getType(), $value, $this->resolveInfo->path);
             if ($value !== self::$undefined) {
-                $this->result->{$this->resultName} = $value;
+                $this->result->{$this->shared->resultName} = $value;
             }
 
         } catch (\Throwable $e) {
@@ -169,10 +155,10 @@ class Execution
     {
         $this->executor->addError(new Error(
             $reason->getMessage() ?: 'An unknown error occurred.',
-            $this->fieldNodes,
+            $this->shared->fieldNodes,
             null,
             null,
-            array_merge($this->parentPath, [$this->resultName]), // !!! $this->resolveInfo might be null
+            array_merge($this->parentPath, [$this->shared->resultName]), // !!! $this->resolveInfo might be null
             $reason
         ));
 
@@ -180,7 +166,7 @@ class Execution
             if ($this->fieldDefinition->getType() instanceof NonNull) {
                 // FIXME: null parent
             } else {
-                $this->result->{$this->resultName} = null;
+                $this->result->{$this->shared->resultName} = null;
             }
         }
     }
@@ -190,7 +176,7 @@ class Execution
         if ($value instanceof \Throwable) {
             $this->executor->addError(new Error(
                 $value->getMessage() ?: 'An unknown error occurred.',
-                $this->fieldNodes,
+                $this->shared->fieldNodes,
                 null,
                 null,
                 $resultPath,
@@ -203,8 +189,8 @@ class Execution
         if ($type instanceof NonNull) {
             if ($value === null) {
                 $this->executor->addError(new Error(
-                    sprintf('Got null value for non-null field "%s".', $this->fieldName),
-                    $this->fieldNodes,
+                    sprintf('Got null value for non-null field "%s".', $this->shared->fieldName),
+                    $this->shared->fieldNodes,
                     null,
                     null,
                     $resultPath
@@ -217,8 +203,8 @@ class Execution
 
             if ($value === null) {
                 $this->executor->addError(new Error(
-                    sprintf('Got null value for non-null field "%s".', $this->fieldName),
-                    $this->fieldNodes,
+                    sprintf('Got null value for non-null field "%s".', $this->shared->fieldName),
+                    $this->shared->fieldNodes,
                     null,
                     null,
                     $resultPath
@@ -266,7 +252,7 @@ class Execution
                                 $type->name,
                                 Utils::printSafe($value)
                             ),
-                            $this->fieldNodes,
+                            $this->shared->fieldNodes,
                             null,
                             null,
                             $resultPath
@@ -283,7 +269,7 @@ class Execution
                             'Unexpected field type "%s".',
                             Utils::printSafe($type)
                         ),
-                        $this->fieldNodes,
+                        $this->shared->fieldNodes,
                         null,
                         null,
                         $resultPath
@@ -298,7 +284,7 @@ class Execution
                 if ($typeCheck !== null && !$typeCheck) {
                     $this->executor->addError(new Error(
                         sprintf('Expected value of type "%s" but got: %s.', $type->name, Utils::printSafe($value)),
-                        $this->fieldNodes,
+                        $this->shared->fieldNodes,
                         null,
                         null,
                         $resultPath
@@ -310,8 +296,8 @@ class Execution
                 $result = new \stdClass();
 
                 $cacheKey = spl_object_hash($objectType);
-                if (isset($this->cachedExecutions->{$cacheKey})) {
-                    foreach ($this->cachedExecutions->{$cacheKey} as $execution) {
+                if (isset($this->shared->executions->{$cacheKey})) {
+                    foreach ($this->shared->executions->{$cacheKey} as $execution) {
                         /** @var Execution $execution */
                         $execution = clone $execution;
                         $execution->type = $objectType;
@@ -323,7 +309,7 @@ class Execution
                     }
 
                 } else {
-                    $this->cachedExecutions->{$cacheKey} = [];
+                    $this->shared->executions->{$cacheKey} = [];
 
                     $this->executor->collector->collectFields(
                         $objectType,
@@ -345,7 +331,7 @@ class Execution
                                 $resultPath
                             );
 
-                            $this->cachedExecutions->{$cacheKey}[] = $execution;
+                            $this->shared->executions->{$cacheKey}[] = $execution;
 
                             $this->executor->enqueue($execution);
                         }
@@ -357,7 +343,7 @@ class Execution
             } else {
                 $this->executor->addError(new Error(
                     sprintf('Unhandled type "%s".', (string)$type),
-                    $this->fieldNodes,
+                    $this->shared->fieldNodes,
                     null,
                     null,
                     $resultPath
@@ -372,7 +358,7 @@ class Execution
     {
         $selections = [];
 
-        foreach ($this->fieldNodes as $fieldNode) {
+        foreach ($this->shared->fieldNodes as $fieldNode) {
             if ($fieldNode->selectionSet === null) {
                 continue;
             }
