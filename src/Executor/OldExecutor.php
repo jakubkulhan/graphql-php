@@ -236,16 +236,14 @@ class OldExecutor
 
         $variableValues = null;
         if ($operation) {
-            $coercedVariableValues = Values::getVariableValues(
+            list($coerceErrors, $variableValues) = Values::getVariableValues(
                 $schema,
                 $operation->variableDefinitions ?: [],
                 $rawVariableValues ?: []
             );
 
-            if ($coercedVariableValues['errors']) {
-                $errors = array_merge($errors, $coercedVariableValues['errors']);
-            } else {
-                $variableValues = $coercedVariableValues['coerced'];
+            if (!empty($coerceErrors)) {
+                $errors = array_merge($errors, $coerceErrors);
             }
         }
 

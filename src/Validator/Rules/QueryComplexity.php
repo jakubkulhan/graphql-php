@@ -202,20 +202,19 @@ class QueryComplexity extends AbstractQuerySecurity
         $args = [];
 
         if ($fieldDef instanceof FieldDefinition) {
-            $variableValuesResult = Values::getVariableValues(
+            list($errors, $variableValues) = Values::getVariableValues(
                 $this->context->getSchema(),
                 $this->variableDefs,
                 $rawVariableValues
             );
 
-            if ($variableValuesResult['errors']) {
+            if ($errors) {
                 throw new Error(implode("\n\n", array_map(
                     function ($error) {
                         return $error->getMessage();
                     }
-                , $variableValuesResult['errors'])));
+                , $errors)));
             }
-            $variableValues = $variableValuesResult['coerced'];
 
             $args = Values::getArgumentValues($fieldDef, $node, $variableValues);
         }
@@ -229,20 +228,19 @@ class QueryComplexity extends AbstractQuerySecurity
                 return false;
             }
 
-            $variableValuesResult = Values::getVariableValues(
+            list($errors, $variableValues) = Values::getVariableValues(
                 $this->context->getSchema(),
                 $this->variableDefs,
                 $this->getRawVariableValues()
             );
 
-            if ($variableValuesResult['errors']) {
+            if (!empty($errors)) {
                 throw new Error(implode("\n\n", array_map(
                     function ($error) {
                         return $error->getMessage();
                     }
-                    , $variableValuesResult['errors'])));
+                    , $errors)));
             }
-            $variableValues = $variableValuesResult['coerced'];
 
             if ($directiveNode->name->value === 'include') {
                 $directive = Directive::includeDirective();

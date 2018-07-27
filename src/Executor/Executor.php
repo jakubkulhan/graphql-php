@@ -43,6 +43,9 @@ class Executor implements Runtime
     public $contextValue;
 
     /** @var mixed|null */
+    private $rawVariableValues;
+
+    /** @var mixed|null */
     public $variableValues;
 
     /** @var Error[] */
@@ -63,14 +66,14 @@ class Executor implements Runtime
     /** @var callable */
     private $doResolve;
 
-    public function __construct(Schema $schema, callable $fieldResolver, PromiseAdapter $promiseAdapter, $rootValue, $contextValue, $variableValues)
+    public function __construct(Schema $schema, callable $fieldResolver, PromiseAdapter $promiseAdapter, $rootValue, $contextValue, $rawVariableValues)
     {
         $this->schema = $schema;
         $this->fieldResolver = $fieldResolver;
         $this->promiseAdapter = $promiseAdapter;
         $this->rootValue = $rootValue;
         $this->contextValue = $contextValue;
-        $this->variableValues = $variableValues;
+        $this->rawVariableValues = $rawVariableValues;
     }
 
     /**
@@ -248,14 +251,24 @@ class Executor implements Runtime
         $this->schedule = new \SplQueue();
         $this->pending = 0;
 
-        // TODO: coerce variable values
-
         $this->collector = new Collector($this->schema, $this);
         $this->collector->initialize($documentNode, $operationName);
 
         if (!empty($this->errors)) {
             return new ExecutionResult(self::resultToArray($this->rootResult), $this->errors);
         }
+
+        list($errors, $coercedVariableValues) = Values::getVariableValues(
+            $this->schema,
+            $this->collector->operation->variableDefinitions ?: [],
+            $this->rawVariableValues ?: []
+        );
+
+        if (!empty($errors)) {
+            return new ExecutionResult(self::resultToArray($this->rootResult), $errors);
+        }
+
+        $this->variableValues = $coercedVariableValues;
 
         $this->collector->collectFields(
             $this->collector->rootType,

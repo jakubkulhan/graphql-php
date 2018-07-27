@@ -16,7 +16,7 @@ class ValuesTest extends \PHPUnit_Framework_TestCase {
     {
         $this->expectInputVariablesMatchOutputVariables(['idInput' => '123456789']);
         $this->assertEquals(
-            ['errors'=> [], 'coerced' => ['idInput' => '123456789']],
+            [null, ['idInput' => '123456789']],
             self::runTestCase(['idInput' => 123456789]),
             'Integer ID was not converted to string'
         );
@@ -104,7 +104,7 @@ class ValuesTest extends \PHPUnit_Framework_TestCase {
     {
         $this->assertEquals(
             $variables,
-            self::runTestCase($variables)['coerced'],
+            self::runTestCase($variables)[1],
             'Output variables did not match input variables' . PHP_EOL . var_export($variables, true) . PHP_EOL
         );
     }
@@ -112,7 +112,7 @@ class ValuesTest extends \PHPUnit_Framework_TestCase {
     private function expectGraphQLError($variables)
     {
         $result = self::runTestCase($variables);
-        $this->assertGreaterThan(0, count($result['errors']));
+        $this->assertNotEmpty($result[0]);
     }
 
     private static $schema;

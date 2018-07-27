@@ -106,7 +106,11 @@ class Values
             }
         }
 
-        return ['errors' => $errors, 'coerced' => $errors ? null : $coercedValues];
+        if (!empty($errors)) {
+            return [$errors, null];
+        }
+
+        return [null, $coercedValues];
     }
 
     /**
