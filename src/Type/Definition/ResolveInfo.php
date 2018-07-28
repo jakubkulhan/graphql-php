@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Type\Definition;
 
 use GraphQL\Language\AST\FieldNode;
@@ -8,6 +11,7 @@ use GraphQL\Language\AST\InlineFragmentNode;
 use GraphQL\Language\AST\OperationDefinitionNode;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Type\Schema;
+use function array_merge_recursive;
 
 /**
  * Structure containing information useful for field resolution process.
@@ -51,7 +55,7 @@ class ResolveInfo
      * Path to this field from the very root value
      *
      * @api
-     * @var array
+     * @var string[]
      */
     public $path;
 
@@ -91,30 +95,31 @@ class ResolveInfo
      * Array of variables passed to query execution
      *
      * @api
-     * @var array
+     * @var mixed[]|null
      */
     public $variableValues;
 
-    public function __construct(string $fieldName,
-                                $fieldNodes,
-                                $returnType,
-                                ObjectType $parentType,
-                                $path,
-                                Schema $schema,
-                                $fragments,
-                                $rootValue,
-                                ?OperationDefinitionNode $operation,
-                                $variableValues)
-    {
-        $this->fieldName = $fieldName;
-        $this->fieldNodes = $fieldNodes;
-        $this->returnType = $returnType;
-        $this->parentType = $parentType;
-        $this->path = $path;
-        $this->schema = $schema;
-        $this->fragments = $fragments;
-        $this->rootValue = $rootValue;
-        $this->operation = $operation;
+    public function __construct(
+        string $fieldName,
+        $fieldNodes,
+        $returnType,
+        ObjectType $parentType,
+        $path,
+        Schema $schema,
+        $fragments,
+        $rootValue,
+        ?OperationDefinitionNode $operation,
+        $variableValues
+    ) {
+        $this->fieldName      = $fieldName;
+        $this->fieldNodes     = $fieldNodes;
+        $this->returnType     = $returnType;
+        $this->parentType     = $parentType;
+        $this->path           = $path;
+        $this->schema         = $schema;
+        $this->fragments      = $fragments;
+        $this->rootValue      = $rootValue;
+        $this->operation      = $operation;
         $this->variableValues = $variableValues;
     }
 
@@ -151,7 +156,7 @@ class ResolveInfo
      *
      * @api
      * @param int $depth How many levels to include in output
-     * @return array
+     * @return mixed[]
      */
     public function getFieldSelection($depth = 0)
     {
@@ -171,17 +176,17 @@ class ResolveInfo
 
         foreach ($selectionSet->selections as $selectionNode) {
             if ($selectionNode instanceof FieldNode) {
-                $fields[$selectionNode->name->value] = $descend > 0 && !empty($selectionNode->selectionSet)
+                $fields[$selectionNode->name->value] = $descend > 0 && ! empty($selectionNode->selectionSet)
                     ? $this->foldSelectionSet($selectionNode->selectionSet, $descend - 1)
                     : true;
-            } else if ($selectionNode instanceof FragmentSpreadNode) {
+            } elseif ($selectionNode instanceof FragmentSpreadNode) {
                 $spreadName = $selectionNode->name->value;
                 if (isset($this->fragments[$spreadName])) {
                     /** @var FragmentDefinitionNode $fragment */
                     $fragment = $this->fragments[$spreadName];
-                    $fields = array_merge_recursive($this->foldSelectionSet($fragment->selectionSet, $descend), $fields);
+                    $fields   = array_merge_recursive($this->foldSelectionSet($fragment->selectionSet, $descend), $fields);
                 }
-            } else if ($selectionNode instanceof InlineFragmentNode) {
+            } elseif ($selectionNode instanceof InlineFragmentNode) {
                 $fields = array_merge_recursive($this->foldSelectionSet($selectionNode->selectionSet, $descend), $fields);
             }
         }

@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Executor;
 
 /**
@@ -6,7 +9,6 @@ namespace GraphQL\Executor;
  */
 class ExecutionStrand
 {
-
     /** @var \Generator */
     public $current;
 
@@ -25,8 +27,7 @@ class ExecutionStrand
     public function __construct(\Generator $coroutine)
     {
         $this->current = $coroutine;
-        $this->stack = [];
-        $this->depth = 0;
+        $this->stack   = [];
+        $this->depth   = 0;
     }
-
 }

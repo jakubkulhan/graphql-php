@@ -1,9 +1,11 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Executor;
 
 use GraphQL\Error\FormattedError;
 use GraphQL\Language\AST\DocumentNode;
-use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\Node;
 use GraphQL\Language\AST\NodeKind;
 use GraphQL\Language\AST\OperationDefinitionNode;
@@ -13,19 +15,32 @@ use GraphQL\Tests\StarWarsSchema;
 use GraphQL\Type\Definition\InputType;
 use GraphQL\Type\Schema;
 use GraphQL\Utils\AST;
+use const DIRECTORY_SEPARATOR;
+use const JSON_PRETTY_PRINT;
+use const JSON_UNESCAPED_SLASHES;
+use const JSON_UNESCAPED_UNICODE;
+use function array_map;
+use function basename;
+use function file_exists;
+use function file_put_contents;
+use function json_encode;
+use function strlen;
+use function strncmp;
 
 class CollectorTest extends \PHPUnit_Framework_TestCase
 {
-
     /**
+     * @param mixed[]|null $variableValues
      * @dataProvider provideForTestCollectFields
      */
     public function testCollectFields(Schema $schema, DocumentNode $documentNode, string $operationName, ?array $variableValues)
     {
         $runtime = new class($variableValues) implements Runtime
         {
+            /** @var \Throwable[] */
             public $errors = [];
 
+            /** @var mixed[]|null */
             public $variableValues;
 
             public function __construct($variableValues)
@@ -50,18 +65,18 @@ class CollectorTest extends \PHPUnit_Framework_TestCase
         $pipeline = [];
         $collector->collectFields($collector->rootType, $collector->operation->selectionSet, function (array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap) use (&$pipeline) {
             $execution = new \stdClass();
-            if (!empty($fieldNodes)) {
+            if (! empty($fieldNodes)) {
                 $execution->fieldNodes = array_map(function (Node $node) {
                     return $node->toArray(true);
                 }, $fieldNodes);
             }
-            if (!empty($fieldName)) {
+            if (! empty($fieldName)) {
                 $execution->fieldName = $fieldName;
             }
-            if (!empty($resultName)) {
+            if (! empty($resultName)) {
                 $execution->resultName = $resultName;
             }
-            if (!empty($argumentValueMap)) {
+            if (! empty($argumentValueMap)) {
                 $execution->argumentValueMap = [];
                 foreach ($argumentValueMap as $argumentName => $valueNode) {
                     /** @var Node $valueNode */
@@ -71,7 +86,6 @@ class CollectorTest extends \PHPUnit_Framework_TestCase
 
             $pipeline[] = $execution;
         });
-
 
         if (strncmp($operationName, 'ShouldEmitError', strlen('ShouldEmitError')) === 0) {
             $this->assertNotEmpty($runtime->errors, 'There should be errors.');
@@ -86,20 +100,20 @@ class CollectorTest extends \PHPUnit_Framework_TestCase
         }
 
         $result = [];
-        if (!empty($runtime->errors)) {
+        if (! empty($runtime->errors)) {
             $result['errors'] = array_map(
                 FormattedError::prepareFormatter(null, false),
                 $runtime->errors
             );
         }
-        if (!empty($pipeline)) {
+        if (! empty($pipeline)) {
             $result['pipeline'] = $pipeline;
         }
 
         $json = json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n";
 
-        $fileName = __DIR__ . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . "Snapshots" . DIRECTORY_SEPARATOR . $operationName . ".json";
-        if (!file_exists($fileName)) {
+        $fileName = __DIR__ . DIRECTORY_SEPARATOR . basename(__FILE__, '.php') . 'Snapshots' . DIRECTORY_SEPARATOR . $operationName . '.json';
+        if (! file_exists($fileName)) {
             file_put_contents($fileName, $json);
         }
 
@@ -339,7 +353,7 @@ class CollectorTest extends \PHPUnit_Framework_TestCase
 
         $data = [];
         foreach ($testCases as list($schema, $query, $variableValues)) {
-            $documentNode = Parser::parse($query, ["noLocation" => true]);
+            $documentNode  = Parser::parse($query, ['noLocation' => true]);
             $operationName = null;
             foreach ($documentNode->definitions as $definitionNode) {
                 /** @var Node $definitionNode */
@@ -358,5 +372,4 @@ class CollectorTest extends \PHPUnit_Framework_TestCase
 
         return $data;
     }
-
 }

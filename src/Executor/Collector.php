@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
@@ -19,13 +22,13 @@ use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Introspection;
 use GraphQL\Type\Schema;
+use function sprintf;
 
 /**
  * @internal
  */
 class Collector
 {
-
     /** @var Schema */
     private $schema;
 
@@ -49,7 +52,7 @@ class Collector
 
     public function __construct(Schema $schema, Runtime $runtime)
     {
-        $this->schema = $schema;
+        $this->schema  = $schema;
         $this->runtime = $runtime;
     }
 
@@ -70,8 +73,7 @@ class Collector
                 ) {
                     $this->operation = $definitionNode;
                 }
-
-            } else if ($definitionNode->kind === NodeKind::FRAGMENT_DEFINITION) {
+            } elseif ($definitionNode->kind === NodeKind::FRAGMENT_DEFINITION) {
                 /** @var FragmentDefinitionNode $definitionNode */
                 $this->fragments[$definitionNode->name->value] = $definitionNode;
             }
@@ -93,9 +95,9 @@ class Collector
 
         if ($this->operation->operation === 'query') {
             $this->rootType = $this->schema->getQueryType();
-        } else if ($this->operation->operation === 'mutation') {
+        } elseif ($this->operation->operation === 'mutation') {
             $this->rootType = $this->schema->getMutationType();
-        } else if ($this->operation->operation === 'subscription') {
+        } elseif ($this->operation->operation === 'subscription') {
             $this->rootType = $this->schema->getSubscriptionType();
         } else {
             $this->runtime->addError(new Error(sprintf('Cannot initialize collector with operation type "%s".', $this->operation->operation)));
@@ -104,7 +106,7 @@ class Collector
 
     public function collectFields(ObjectType $runtimeType, ?SelectionSetNode $selectionSet, callable $emit)
     {
-        $this->fields = [];
+        $this->fields           = [];
         $this->visitedFragments = [];
 
         $this->doCollectFields($runtimeType, $selectionSet);
@@ -114,16 +116,16 @@ class Collector
             $fieldName = $fieldNode->name->value;
 
             $argumentValueMap = null;
-            if (!empty($fieldNode->arguments)) {
+            if (! empty($fieldNode->arguments)) {
                 foreach ($fieldNode->arguments as $argumentNode) {
-                    $argumentValueMap = $argumentValueMap ?? [];
+                    $argumentValueMap                             = $argumentValueMap ?? [];
                     $argumentValueMap[$argumentNode->name->value] = $argumentNode->value;
                 }
             }
 
             if ($fieldName !== Introspection::TYPE_NAME_FIELD_NAME &&
-                !($runtimeType === $this->schema->getQueryType() && ($fieldName === Introspection::SCHEMA_FIELD_NAME || $fieldName === Introspection::TYPE_FIELD_NAME)) &&
-                !$runtimeType->hasField($fieldName)
+                ! ($runtimeType === $this->schema->getQueryType() && ($fieldName === Introspection::SCHEMA_FIELD_NAME || $fieldName === Introspection::TYPE_FIELD_NAME)) &&
+                ! $runtimeType->hasField($fieldName)
             ) {
                 // do not emit error
                 continue;
@@ -142,7 +144,7 @@ class Collector
         foreach ($selectionSet->selections as $selection) {
             /** @var FieldNode|FragmentSpreadNode|InlineFragmentNode $selection */
 
-            if (!empty($selection->directives)) {
+            if (! empty($selection->directives)) {
                 foreach ($selection->directives as $directiveNode) {
                     if ($directiveNode->name->value === Directive::SKIP_NAME) {
                         /** @var ValueNode|null $condition */
@@ -164,8 +166,7 @@ class Collector
                                 continue 2; // !!! advances outer loop
                             }
                         }
-
-                    } else if ($directiveNode->name->value === Directive::INCLUDE_NAME) {
+                    } elseif ($directiveNode->name->value === Directive::INCLUDE_NAME) {
                         /** @var ValueNode|null $condition */
                         $condition = null;
                         foreach ($directiveNode->arguments as $argumentNode) {
@@ -194,20 +195,19 @@ class Collector
 
                 $resultName = $selection->alias ? $selection->alias->value : $selection->name->value;
 
-                if (!isset($this->fields[$resultName])) {
+                if (! isset($this->fields[$resultName])) {
                     $this->fields[$resultName] = [];
                 }
 
                 $this->fields[$resultName][] = $selection;
-
-            } else if ($selection->kind === NodeKind::FRAGMENT_SPREAD) {
+            } elseif ($selection->kind === NodeKind::FRAGMENT_SPREAD) {
                 /** @var FragmentSpreadNode $selection */
 
                 $fragmentName = $selection->name->value;
 
                 if (isset($this->visitedFragments[$fragmentName])) {
                     continue;
-                } else if (!isset($this->fragments[$fragmentName])) {
+                } elseif (! isset($this->fragments[$fragmentName])) {
                     $this->runtime->addError(new Error(
                         sprintf('Fragment "%s" does not exist.', $fragmentName),
                         $selection
@@ -218,9 +218,9 @@ class Collector
                 $this->visitedFragments[$fragmentName] = true;
 
                 $fragmentDefinition = $this->fragments[$fragmentName];
-                $conditionTypeName = $fragmentDefinition->typeCondition->name->value;
+                $conditionTypeName  = $fragmentDefinition->typeCondition->name->value;
 
-                if (!$this->schema->hasType($conditionTypeName)) {
+                if (! $this->schema->hasType($conditionTypeName)) {
                     $this->runtime->addError(new Error(
                         sprintf('Cannot spread fragment "%s", type "%s" does not exist.', $fragmentName, $conditionTypeName),
                         $selection
@@ -234,21 +234,20 @@ class Collector
                     if ($runtimeType->name !== $conditionType->name) {
                         continue;
                     }
-                } else if ($conditionType instanceof AbstractType) {
-                    if (!$this->schema->isPossibleType($conditionType, $runtimeType)) {
+                } elseif ($conditionType instanceof AbstractType) {
+                    if (! $this->schema->isPossibleType($conditionType, $runtimeType)) {
                         continue;
                     }
                 }
 
                 $this->doCollectFields($runtimeType, $fragmentDefinition->selectionSet);
-
-            } else if ($selection->kind === NodeKind::INLINE_FRAGMENT) {
+            } elseif ($selection->kind === NodeKind::INLINE_FRAGMENT) {
                 /** @var InlineFragmentNode $selection */
 
                 if ($selection->typeCondition !== null) {
                     $conditionTypeName = $selection->typeCondition->name->value;
 
-                    if (!$this->schema->hasType($conditionTypeName)) {
+                    if (! $this->schema->hasType($conditionTypeName)) {
                         $this->runtime->addError(new Error(
                             sprintf('Cannot spread inline fragment, type "%s" does not exist.', $conditionTypeName),
                             $selection
@@ -262,8 +261,8 @@ class Collector
                         if ($runtimeType->name !== $conditionType->name) {
                             continue;
                         }
-                    } else if ($conditionType instanceof AbstractType) {
-                        if (!$this->schema->isPossibleType($conditionType, $runtimeType)) {
+                    } elseif ($conditionType instanceof AbstractType) {
+                        if (! $this->schema->isPossibleType($conditionType, $runtimeType)) {
                             continue;
                         }
                     }
@@ -273,5 +272,4 @@ class Collector
             }
         }
     }
-
 }

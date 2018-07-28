@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
-use GraphQL\Language\AST\ArgumentNode;
 use GraphQL\Language\AST\DirectiveNode;
 use GraphQL\Language\AST\EnumValueDefinitionNode;
 use GraphQL\Language\AST\FieldDefinitionNode;
@@ -106,7 +105,7 @@ class Values
             }
         }
 
-        if (!empty($errors)) {
+        if (! empty($errors)) {
             return [$errors, null];
         }
 
@@ -174,20 +173,20 @@ class Values
 
     /**
      * @param FieldDefinition|Directive $fieldDefinition
-     * @param array   $argumentValueMap
+     * @param mixed[]                   $argumentValueMap
      * @param mixed[]                   $variableValues
-     * @param Node|null $referenceNode
+     * @param Node|null                 $referenceNode
      * @return mixed[]
      * @throws Error
      */
     public static function getArgumentValuesForMap($fieldDefinition, $argumentValueMap, $variableValues = null, $referenceNode = null)
     {
-        $argumentDefinitions  = $fieldDefinition->args;
-        $coercedValues = [];
+        $argumentDefinitions = $fieldDefinition->args;
+        $coercedValues       = [];
 
         foreach ($argumentDefinitions as $argumentDefinition) {
-            $name         = $argumentDefinition->name;
-            $argType      = $argumentDefinition->getType();
+            $name              = $argumentDefinition->name;
+            $argType           = $argumentDefinition->getType();
             $argumentValueNode = $argumentValueMap[$name] ?? null;
 
             if (! $argumentValueNode) {

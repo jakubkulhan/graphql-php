@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
@@ -12,13 +15,14 @@ use GraphQL\Type\Definition\NonNull;
 use GraphQL\Type\Definition\ResolveInfo;
 use GraphQL\Type\Schema;
 use GraphQL\Utils\AST;
+use function is_array;
+use function is_object;
 
 /**
  * Implements the "Evaluating requests" section of the GraphQL specification.
  */
 class Executor implements Runtime
 {
-
     /** @var callable|string[] */
     private static $defaultFieldResolver = [__CLASS__, 'defaultFieldResolver'];
 
@@ -96,11 +100,11 @@ class Executor implements Runtime
 
     public function __construct(Schema $schema, callable $fieldResolver, PromiseAdapter $promiseAdapter, $rootValue, $contextValue, $rawVariableValues)
     {
-        $this->schema = $schema;
-        $this->fieldResolver = $fieldResolver;
-        $this->promiseAdapter = $promiseAdapter;
-        $this->rootValue = $rootValue;
-        $this->contextValue = $contextValue;
+        $this->schema            = $schema;
+        $this->fieldResolver     = $fieldResolver;
+        $this->promiseAdapter    = $promiseAdapter;
+        $this->rootValue         = $rootValue;
+        $this->contextValue      = $contextValue;
         $this->rawVariableValues = $rawVariableValues;
     }
 
@@ -133,24 +137,21 @@ class Executor implements Runtime
      *
      * @api
      *
-     * @param Schema $schema
-     * @param DocumentNode $documentNode
-     * @param mixed|null $rootValue
-     * @param mixed[]|null $contextValue
+     * @param mixed|null                $rootValue
+     * @param mixed[]|null              $contextValue
      * @param mixed[]|\ArrayAccess|null $variableValues
-     * @param string|null $operationName
-     * @param callable|null $fieldResolver
      *
      * @return ExecutionResult|Promise
      */
-    public static function execute(Schema $schema,
-                                   DocumentNode $documentNode,
-                                   $rootValue = null,
-                                   $contextValue = null,
-                                   $variableValues = null,
-                                   ?string $operationName = null,
-                                   ?callable $fieldResolver = null)
-    {
+    public static function execute(
+        Schema $schema,
+        DocumentNode $documentNode,
+        $rootValue = null,
+        $contextValue = null,
+        $variableValues = null,
+        ?string $operationName = null,
+        ?callable $fieldResolver = null
+    ) {
         $promiseAdapter = static::getPromiseAdapter();
 
         $result = static::promiseToExecute(
@@ -178,26 +179,23 @@ class Executor implements Runtime
      * Useful for async PHP platforms.
      *
      * @api
-     * @param PromiseAdapter $promiseAdapter
-     * @param Schema $schema
-     * @param DocumentNode $documentNode
      * @param mixed[]|null $rootValue
      * @param mixed[]|null $contextValue
      * @param mixed[]|null $variableValues
-     * @param string|null $operationName
-     * @param callable|null $fieldResolver
+     * @param string|null  $operationName
      *
      * @return Promise
      */
-    public static function promiseToExecute(PromiseAdapter $promiseAdapter,
-                                            Schema $schema,
-                                            DocumentNode $documentNode,
-                                            $rootValue = null,
-                                            $contextValue = null,
-                                            $variableValues = null,
-                                            $operationName = null,
-                                            ?callable $fieldResolver = null)
-    {
+    public static function promiseToExecute(
+        PromiseAdapter $promiseAdapter,
+        Schema $schema,
+        DocumentNode $documentNode,
+        $rootValue = null,
+        $contextValue = null,
+        $variableValues = null,
+        $operationName = null,
+        ?callable $fieldResolver = null
+    ) {
         $executor = new static(
             $schema,
             $fieldResolver ?: self::$defaultFieldResolver,
@@ -211,9 +209,9 @@ class Executor implements Runtime
 
         if ($result instanceof Promise) {
             return $result;
-        } else {
-            return $promiseAdapter->createFulfilled($result);
         }
+
+        return $promiseAdapter->createFulfilled($result);
     }
 
     /**
@@ -222,17 +220,16 @@ class Executor implements Runtime
      * and returns it as the result, or if it's a function, returns the result
      * of calling that function while passing along args and context.
      *
-     * @param mixed $source
-     * @param mixed[] $args
+     * @param mixed        $source
+     * @param mixed[]      $args
      * @param mixed[]|null $context
-     * @param ResolveInfo $info
      *
      * @return mixed|null
      */
     public static function defaultFieldResolver($source, $args, $context, ResolveInfo $info)
     {
         $fieldName = $info->fieldName;
-        $property = null;
+        $property  = null;
 
         if (is_array($source) || $source instanceof \ArrayAccess) {
             if (isset($source[$fieldName])) {
@@ -258,31 +255,31 @@ class Executor implements Runtime
                 return new \stdClass();
             }
             return $array;
+        }
 
-        } else if (is_array($value)) {
+        if (is_array($value)) {
             $array = [];
             foreach ($value as $item) {
                 $array[] = self::resultToArray($item);
             }
             return $array;
-
-        } else {
-            return $value;
         }
+
+        return $value;
     }
 
     public function doExecute(DocumentNode $documentNode, ?string $operationName)
     {
         $this->rootResult = new \stdClass();
-        $this->errors = [];
-        $this->queue = new \SplQueue();
-        $this->schedule = new \SplQueue();
-        $this->pending = 0;
+        $this->errors     = [];
+        $this->queue      = new \SplQueue();
+        $this->schedule   = new \SplQueue();
+        $this->pending    = 0;
 
         $this->collector = new Collector($this->schema, $this);
         $this->collector->initialize($documentNode, $operationName);
 
-        if (!empty($this->errors)) {
+        if (! empty($this->errors)) {
             return new ExecutionResult(null, $this->errors);
         }
 
@@ -292,7 +289,7 @@ class Executor implements Runtime
             $this->rawVariableValues ?: []
         );
 
-        if (!empty($errors)) {
+        if (! empty($errors)) {
             return new ExecutionResult(null, $errors);
         }
 
@@ -319,7 +316,7 @@ class Executor implements Runtime
                     $execution->nullFence = [$resultName];
                 }
 
-                if ($this->collector->operation->operation === 'mutation' && !$this->queue->isEmpty()) {
+                if ($this->collector->operation->operation === 'mutation' && ! $this->queue->isEmpty()) {
                     $this->schedule->enqueue($execution);
                 } else {
                     $this->queue->enqueue(new ExecutionStrand($execution->run()));
@@ -333,16 +330,15 @@ class Executor implements Runtime
             return $this->promiseAdapter->create(function (callable $resolve) {
                 $this->doResolve = $resolve;
             });
-
-        } else {
-            return new ExecutionResult(self::resultToArray($this->rootResult), $this->errors);
         }
+
+        return new ExecutionResult(self::resultToArray($this->rootResult), $this->errors);
     }
 
     private function run()
     {
         RUN:
-        while (!$this->queue->isEmpty()) {
+        while (! $this->queue->isEmpty()) {
             /** @var ExecutionStrand $strand */
             $strand = $this->queue->dequeue();
 
@@ -357,7 +353,7 @@ class Executor implements Runtime
                     }
 
                     $strand->success = null;
-                    $strand->value = null;
+                    $strand->value   = null;
                 }
 
                 START:
@@ -366,22 +362,21 @@ class Executor implements Runtime
 
                     if ($value instanceof \Generator) {
                         $strand->stack[$strand->depth++] = $strand->current;
-                        $strand->current = $value;
+                        $strand->current                 = $value;
                         goto START;
-
-                    } else if ($this->promiseAdapter->isThenable($value)) {
+                    } elseif ($this->promiseAdapter->isThenable($value)) {
                         $this->promiseAdapter
                             ->convertThenable($value)
                             ->then(
                                 function ($value) use ($strand) {
                                     $strand->success = true;
-                                    $strand->value = $value;
+                                    $strand->value   = $value;
                                     $this->queue->enqueue($strand);
                                     $this->done();
                                 },
                                 function (\Throwable $throwable) use ($strand) {
                                     $strand->success = false;
-                                    $strand->value = $throwable;
+                                    $strand->value   = $throwable;
                                     $this->queue->enqueue($strand);
                                     $this->done();
                                 }
@@ -390,36 +385,38 @@ class Executor implements Runtime
                         ++$this->pending;
 
                         continue;
-
                     } else {
                         $strand->success = true;
-                        $strand->value = $value;
+                        $strand->value   = $value;
                         goto RESUME;
                     }
                 }
 
                 $strand->success = true;
-                $strand->value = $strand->current->getReturn();
-
+                $strand->value   = $strand->current->getReturn();
             } catch (\Throwable $reason) {
                 $strand->success = false;
-                $strand->value = $reason;
+                $strand->value   = $reason;
             }
 
-            if ($strand->depth > 0) {
-                $current = &$strand->stack[--$strand->depth];
-                $strand->current = $current;
-                $current = null;
-                goto RESUME;
+            if ($strand->depth <= 0) {
+                continue;
             }
+
+            $current         = &$strand->stack[--$strand->depth];
+            $strand->current = $current;
+            $current         = null;
+            goto RESUME;
         }
 
-        if ($this->pending === 0 && !$this->schedule->isEmpty()) {
-            /** @var Execution $execution */
-            $execution = $this->schedule->dequeue();
-            $this->queue->enqueue(new ExecutionStrand($execution->run()));
-            goto RUN;
+        if ($this->pending !== 0 || $this->schedule->isEmpty()) {
+            return;
         }
+
+        /** @var Execution $execution */
+        $execution = $this->schedule->dequeue();
+        $this->queue->enqueue(new ExecutionStrand($execution->run()));
+        goto RUN;
     }
 
     private function done()
@@ -428,10 +425,12 @@ class Executor implements Runtime
 
         $this->run();
 
-        if ($this->pending === 0) {
-            $doResolve = $this->doResolve;
-            $doResolve(new ExecutionResult(self::resultToArray($this->rootResult), $this->errors));
+        if ($this->pending !== 0) {
+            return;
         }
+
+        $doResolve = $this->doResolve;
+        $doResolve(new ExecutionResult(self::resultToArray($this->rootResult), $this->errors));
     }
 
     /**
@@ -449,5 +448,4 @@ class Executor implements Runtime
     {
         $this->errors[] = $error;
     }
-
 }

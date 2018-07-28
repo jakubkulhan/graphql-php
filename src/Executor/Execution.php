@@ -1,9 +1,13 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
 use GraphQL\Error\InvariantViolation;
 use GraphQL\Error\Warning;
+use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Type\Definition\AbstractType;
 use GraphQL\Type\Definition\CompositeType;
@@ -17,13 +21,19 @@ use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Definition\UnionType;
 use GraphQL\Type\Introspection;
 use GraphQL\Utils\Utils;
+use function array_merge;
+use function count;
+use function is_array;
+use function is_string;
+use function spl_object_hash;
+use function sprintf;
 
 /**
  * @internal
  */
 class Execution
 {
-
+    /** @var object */
     private static $undefined;
 
     /** @var Executor */
@@ -41,36 +51,45 @@ class Execution
     /** @var object */
     private $result;
 
-    /** @var array */
+    /** @var string[] */
     private $path;
 
     /** @var ResolveInfo|null */
     private $resolveInfo;
 
-    /** @var array|null */
+    /** @var string[]|null */
     public $nullFence;
 
-    public function __construct(Executor $executor,
-                                array $fieldNodes,
-                                string $fieldName,
-                                string $resultName,
-                                ?array $argumentValueMap,
-                                ObjectType $type,
-                                $value,
-                                $result,
-                                array $path,
-                                ?array $nullFence = null)
-    {
-        if (!isset(self::$undefined)) {
+    /**
+     * @param FieldNode[]   $fieldNodes
+     * @param mixed[]|null  $argumentValueMap
+     * @param mixed         $value
+     * @param object        $result
+     * @param string[]      $path
+     * @param string[]|null $nullFence
+     */
+    public function __construct(
+        Executor $executor,
+        array $fieldNodes,
+        string $fieldName,
+        string $resultName,
+        ?array $argumentValueMap,
+        ObjectType $type,
+        $value,
+        $result,
+        array $path,
+        ?array $nullFence = null
+    ) {
+        if (! isset(self::$undefined)) {
             self::$undefined = Utils::undefined();
         }
 
-        $this->executor = $executor;
-        $this->shared = new ExecutionSharedState($fieldNodes, $fieldName, $resultName, $argumentValueMap);
-        $this->type = $type;
-        $this->value = $value;
-        $this->result = $result;
-        $this->path = $path;
+        $this->executor  = $executor;
+        $this->shared    = new ExecutionSharedState($fieldNodes, $fieldName, $resultName, $argumentValueMap);
+        $this->type      = $type;
+        $this->value     = $value;
+        $this->result    = $result;
+        $this->path      = $path;
         $this->nullFence = $nullFence;
     }
 
@@ -87,12 +106,11 @@ class Execution
 
         try {
             if ($this->shared->ifType === $this->type) {
-                $resolve = $this->shared->resolveIfType;
-                $returnType = $this->shared->returnTypeIfType;
-                $arguments = $this->shared->argumentsIfType;
-                $this->resolveInfo = clone $this->shared->resolveInfoIfType;
+                $resolve                 = $this->shared->resolveIfType;
+                $returnType              = $this->shared->returnTypeIfType;
+                $arguments               = $this->shared->argumentsIfType;
+                $this->resolveInfo       = clone $this->shared->resolveInfoIfType;
                 $this->resolveInfo->path = $this->path;
-
             } else {
                 $fieldDefinition = $this->findFieldDefinition();
 
@@ -126,10 +144,10 @@ class Execution
                 );
 
                 // !!! assign only in batch when no exception can be thrown in-between
-                $this->shared->ifType = $this->type;
-                $this->shared->returnTypeIfType = $returnType;
-                $this->shared->resolveIfType = $resolve;
-                $this->shared->argumentsIfType = $arguments;
+                $this->shared->ifType            = $this->type;
+                $this->shared->returnTypeIfType  = $returnType;
+                $this->shared->resolveIfType     = $resolve;
+                $this->shared->argumentsIfType   = $arguments;
                 $this->shared->resolveInfoIfType = $this->resolveInfo;
             }
 
@@ -139,7 +157,6 @@ class Execution
                 $this->path,
                 $this->nullFence
             );
-
         } catch (\Throwable $reason) {
             $this->executor->addError(Error::createLocatedError(
                 $reason,
@@ -152,8 +169,7 @@ class Execution
 
         if ($value !== self::$undefined) {
             $this->result->{$this->shared->resultName} = $value;
-
-        } else if ($this->resolveInfo !== null && $this->resolveInfo->returnType instanceof NonNull) { // !!! $this->resolveInfo might not have been initialized yet
+        } elseif ($this->resolveInfo !== null && $this->resolveInfo->returnType instanceof NonNull) { // !!! $this->resolveInfo might not have been initialized yet
             $result =& $this->executor->rootResult;
             foreach ($this->nullFence ?? [] as $key) {
                 if (is_string($key)) {
@@ -170,23 +186,33 @@ class Execution
     {
         if ($this->shared->fieldName === Introspection::SCHEMA_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
             return Introspection::schemaMetaFieldDef();
-        } else if ($this->shared->fieldName === Introspection::TYPE_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
-            return Introspection::typeMetaFieldDef();
-        } else if ($this->shared->fieldName === Introspection::TYPE_NAME_FIELD_NAME) {
-            return Introspection::typeNameMetaFieldDef();
-        } else {
-            return $this->type->getField($this->shared->fieldName);
         }
+
+        if ($this->shared->fieldName === Introspection::TYPE_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
+            return Introspection::typeMetaFieldDef();
+        }
+
+        if ($this->shared->fieldName === Introspection::TYPE_NAME_FIELD_NAME) {
+            return Introspection::typeNameMetaFieldDef();
+        }
+
+        return $this->type->getField($this->shared->fieldName);
     }
 
+    /**
+     * @param mixed         $value
+     * @param string[]      $path
+     * @param string[]|null $nullFence
+     * @return mixed
+     */
     private function completeValue(Type $type, $value, array $path, ?array $nullFence)
     {
-        $nonNull = false;
+        $nonNull     = false;
         $returnValue = null;
 
         if ($type instanceof NonNull) {
             $nonNull = true;
-            $type = $type->getWrappedType();
+            $type    = $type->getWrappedType();
         } else {
             $nullFence = $path;
         }
@@ -213,7 +239,7 @@ class Execution
         if ($value === null) {
             $returnValue = $value;
             goto CHECKED_RETURN;
-        } else if ($value instanceof \Throwable) {
+        } elseif ($value instanceof \Throwable) {
             $this->executor->addError(Error::createLocatedError(
                 $value,
                 $this->shared->fieldNodes,
@@ -228,10 +254,10 @@ class Execution
         }
 
         if ($type instanceof ListOfType) {
-            $returnValue = [];
-            $index = -1;
-            $itemType = $type->getWrappedType();
-            $itemPath = array_merge($path, [null]);
+            $returnValue   = [];
+            $index         = -1;
+            $itemType      = $type->getWrappedType();
+            $itemPath      = array_merge($path, [null]);
             $itemPathIndex = count($itemPath) - 1;
             foreach ($value as $item) {
                 ++$index;
@@ -254,7 +280,6 @@ class Execution
             }
 
             goto CHECKED_RETURN;
-
         } else {
             if ($type !== $this->executor->schema->getType($type->name)) {
                 $hint = '';
@@ -298,20 +323,19 @@ class Execution
                     $returnValue = null;
                 }
                 goto CHECKED_RETURN;
-
-            } else if ($type instanceof CompositeType) {
+            } elseif ($type instanceof CompositeType) {
                 if ($type instanceof InterfaceType || $type instanceof UnionType) {
                     /** @var ObjectType|null $objectType */
                     $objectType = $type->resolveType($value, $this->executor->contextValue, $this->resolveInfo);
 
-                    if ($objectType !== null) {
-                        // !!! $objectType->resolveType() might return promise, yield to resolve
-                        $objectType = yield $objectType;
-                        if (is_string($objectType)) {
-                            $objectType = $this->executor->schema->getType($objectType);
-                        }
-                    } else {
+                    if ($objectType === null) {
                         $objectType = yield $this->resolveTypeSlow($value, $type);
+                    }
+
+                    // !!! $objectType->resolveType() might return promise, yield to resolve
+                    $objectType = yield $objectType;
+                    if (is_string($objectType)) {
+                        $objectType = $this->executor->schema->getType($objectType);
                     }
 
                     if ($objectType === null) {
@@ -327,8 +351,7 @@ class Execution
 
                         $returnValue = self::$undefined;
                         goto CHECKED_RETURN;
-
-                    } else if (!($objectType instanceof ObjectType)) {
+                    } elseif (! ($objectType instanceof ObjectType)) {
                         $this->executor->addError(Error::createLocatedError(
                             new InvariantViolation(sprintf(
                                 'Abstract type %1$s must resolve to an Object type at ' .
@@ -347,8 +370,7 @@ class Execution
 
                         $returnValue = null;
                         goto CHECKED_RETURN;
-
-                    } else if (!$this->executor->schema->isPossibleType($type, $objectType)) {
+                    } elseif (! $this->executor->schema->isPossibleType($type, $objectType)) {
                         $this->executor->addError(Error::createLocatedError(
                             new InvariantViolation(sprintf(
                                 'Runtime Object type "%s" is not a possible type for "%s".',
@@ -361,8 +383,7 @@ class Execution
 
                         $returnValue = null;
                         goto CHECKED_RETURN;
-
-                    } else if ($objectType !== $this->executor->schema->getType($objectType->name)) {
+                    } elseif ($objectType !== $this->executor->schema->getType($objectType->name)) {
                         $this->executor->addError(Error::createLocatedError(
                             new InvariantViolation(
                                 sprintf(
@@ -381,10 +402,8 @@ class Execution
                         $returnValue = null;
                         goto CHECKED_RETURN;
                     }
-
-                } else if ($type instanceof ObjectType) {
+                } elseif ($type instanceof ObjectType) {
                     $objectType = $type;
-
                 } else {
                     $this->executor->addError(Error::createLocatedError(
                         sprintf(
@@ -403,7 +422,7 @@ class Execution
                 if ($typeCheck !== null) {
                     // !!! $objectType->isTypeOf() might return promise, yield to resolve
                     $typeCheck = yield $typeCheck;
-                    if (!$typeCheck) {
+                    if (! $typeCheck) {
                         $this->executor->addError(Error::createLocatedError(
                             sprintf('Expected value of type "%s" but got: %s.', $type->name, Utils::printSafe($value)),
                             $this->shared->fieldNodes,
@@ -421,28 +440,35 @@ class Execution
                 if (isset($this->shared->executions[$cacheKey])) {
                     foreach ($this->shared->executions[$cacheKey] as $execution) {
                         /** @var Execution $execution */
-                        $execution = clone $execution;
-                        $execution->type = $objectType;
-                        $execution->value = $value;
-                        $execution->result = $returnValue;
-                        $execution->path = array_merge($path, [$execution->shared->resultName]);
-                        $execution->nullFence = $nullFence;
+                        $execution              = clone $execution;
+                        $execution->type        = $objectType;
+                        $execution->value       = $value;
+                        $execution->result      = $returnValue;
+                        $execution->path        = array_merge($path, [$execution->shared->resultName]);
+                        $execution->nullFence   = $nullFence;
                         $execution->resolveInfo = null;
 
                         $this->executor->queue->enqueue(new ExecutionStrand($execution->run()));
                     }
-
                 } else {
                     $this->shared->executions[$cacheKey] = [];
 
                     $this->executor->collector->collectFields(
                         $objectType,
                         $this->shared->mergedSelectionSet ?? $this->mergeSelectionSets(),
-                        function (array $fieldNodes,
-                                  string $fieldName,
-                                  string $resultName,
-                                  ?array $argumentValueMap) use ($objectType, $value, $returnValue, $path, $cacheKey, $nullFence) {
-
+                        function (
+                            array $fieldNodes,
+                            string $fieldName,
+                            string $resultName,
+                            ?array $argumentValueMap
+                        ) use (
+                            $objectType,
+                            $value,
+                            $returnValue,
+                            $path,
+                            $cacheKey,
+                            $nullFence
+                        ) {
                             $execution = new Execution(
                                 $this->executor,
                                 $fieldNodes,
@@ -464,7 +490,6 @@ class Execution
                 }
 
                 goto CHECKED_RETURN;
-
             } else {
                 $this->executor->addError(Error::createLocatedError(
                     sprintf('Unhandled type "%s".', Utils::printSafe($type)),
@@ -509,9 +534,7 @@ class Execution
             }
         }
 
-        return $this->shared->mergedSelectionSet = new SelectionSetNode([
-            'selections' => $selections,
-        ]);
+        return $this->shared->mergedSelectionSet = new SelectionSetNode(['selections' => $selections]);
     }
 
     private function resolveTypeSlow($value, AbstractType $abstractType)
@@ -546,12 +569,13 @@ class Execution
         $selectedType = null;
         foreach ($possibleTypes as $type) {
             $typeCheck = yield $type->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
-            if ($selectedType === null && $typeCheck === true) {
-                $selectedType = $type;
+            if ($selectedType !== null || $typeCheck !== true) {
+                continue;
             }
+
+            $selectedType = $type;
         }
 
         return $selectedType;
     }
-
 }

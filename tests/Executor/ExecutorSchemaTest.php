@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Tests\Executor;
 
 use GraphQL\Executor\Executor;
@@ -9,21 +12,16 @@ use GraphQL\Type\Schema;
 
 class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
 {
-    // Execute: Handles execution with a complex schema
-
-    /**
-     * @it executes using a schema
-     */
     public function testExecutesUsingASchema()
     {
         $BlogArticle = null;
-        $BlogImage = new ObjectType([
+        $BlogImage   = new ObjectType([
             'name' => 'Image',
             'fields' => [
                 'url' => ['type' => Type::string()],
                 'width' => ['type' => Type::int()],
                 'height' => ['type' => Type::int()],
-            ]
+            ],
         ]);
 
         $BlogAuthor = new ObjectType([
@@ -37,11 +35,11 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
                         'type' => $BlogImage,
                         'resolve' => function ($obj, $args) {
                             return $obj['pic']($args['width'], $args['height']);
-                        }
+                        },
                     ],
-                    'recentArticle' => $BlogArticle
+                    'recentArticle' => $BlogArticle,
                 ];
-            }
+            },
         ]);
 
         $BlogArticle = new ObjectType([
@@ -52,8 +50,8 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
                 'author' => ['type' => $BlogAuthor],
                 'title' => ['type' => Type::string()],
                 'body' => ['type' => Type::string()],
-                'keywords' => ['type' => Type::listOf(Type::string())]
-            ]
+                'keywords' => ['type' => Type::listOf(Type::string())],
+            ],
         ]);
 
         $BlogQuery = new ObjectType([
@@ -64,7 +62,7 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
                     'args' => ['id' => ['type' => Type::id()]],
                     'resolve' => function ($_, $args) {
                         return $this->article($args['id']);
-                    }
+                    },
                 ],
                 'feed' => [
                     'type' => Type::listOf($BlogArticle),
@@ -79,15 +77,14 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
                             $this->article(7),
                             $this->article(8),
                             $this->article(9),
-                            $this->article(10)
+                            $this->article(10),
                         ];
-                    }
-                ]
-            ]
+                    },
+                ],
+            ],
         ]);
 
         $BlogSchema = new Schema(['query' => $BlogQuery]);
-
 
         $request = '
       {
@@ -126,26 +123,46 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
         $expected = [
             'data' => [
                 'feed' => [
-                    ['id' => '1',
-                        'title' => 'My Article 1'],
-                    ['id' => '2',
-                        'title' => 'My Article 2'],
-                    ['id' => '3',
-                        'title' => 'My Article 3'],
-                    ['id' => '4',
-                        'title' => 'My Article 4'],
-                    ['id' => '5',
-                        'title' => 'My Article 5'],
-                    ['id' => '6',
-                        'title' => 'My Article 6'],
-                    ['id' => '7',
-                        'title' => 'My Article 7'],
-                    ['id' => '8',
-                        'title' => 'My Article 8'],
-                    ['id' => '9',
-                        'title' => 'My Article 9'],
-                    ['id' => '10',
-                        'title' => 'My Article 10']
+                    [
+                        'id' => '1',
+                        'title' => 'My Article 1',
+                    ],
+                    [
+                        'id' => '2',
+                        'title' => 'My Article 2',
+                    ],
+                    [
+                        'id' => '3',
+                        'title' => 'My Article 3',
+                    ],
+                    [
+                        'id' => '4',
+                        'title' => 'My Article 4',
+                    ],
+                    [
+                        'id' => '5',
+                        'title' => 'My Article 5',
+                    ],
+                    [
+                        'id' => '6',
+                        'title' => 'My Article 6',
+                    ],
+                    [
+                        'id' => '7',
+                        'title' => 'My Article 7',
+                    ],
+                    [
+                        'id' => '8',
+                        'title' => 'My Article 8',
+                    ],
+                    [
+                        'id' => '9',
+                        'title' => 'My Article 9',
+                    ],
+                    [
+                        'id' => '10',
+                        'title' => 'My Article 10',
+                    ],
                 ],
                 'article' => [
                     'id' => '1',
@@ -158,18 +175,18 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
                         'pic' => [
                             'url' => 'cdn://123',
                             'width' => 640,
-                            'height' => 480
+                            'height' => 480,
                         ],
                         'recentArticle' => [
                             'id' => '1',
                             'isPublished' => true,
                             'title' => 'My Article 1',
                             'body' => 'This is a post',
-                            'keywords' => ['foo', 'bar', '1', 'true', null]
-                        ]
-                    ]
-                ]
-            ]
+                            'keywords' => ['foo', 'bar', '1', 'true', null],
+                        ],
+                    ],
+                ],
+            ],
         ];
 
         $this->assertEquals($expected, Executor::execute($BlogSchema, Parser::parse($request))->toArray());
@@ -178,7 +195,7 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
     private function article($id)
     {
         $johnSmith = null;
-        $article = function ($id) use (&$johnSmith) {
+        $article   = function ($id) use (&$johnSmith) {
             return [
                 'id' => $id,
                 'isPublished' => 'true',
@@ -186,15 +203,15 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
                 'title' => 'My Article ' . $id,
                 'body' => 'This is a post',
                 'hidden' => 'This data is not exposed in the schema',
-                'keywords' => ['foo', 'bar', 1, true, null]
+                'keywords' => ['foo', 'bar', 1, true, null],
             ];
         };
 
         $getPic = function ($uid, $width, $height) {
             return [
-                'url' => "cdn://$uid",
+                'url' => 'cdn://' . $uid,
                 'width' => $width,
-                'height' => $height
+                'height' => $height,
             ];
         };
 
@@ -209,5 +226,4 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
 
         return $article($id);
     }
-
 }

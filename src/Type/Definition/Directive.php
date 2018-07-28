@@ -1,27 +1,30 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Type\Definition;
 
 use GraphQL\Language\AST\DirectiveDefinitionNode;
 use GraphQL\Language\DirectiveLocation;
 use GraphQL\Utils\Utils;
+use function array_keys;
+use function in_array;
+use function is_array;
 
 /**
  * Class Directive
- * @package GraphQL\Type\Definition
  */
 class Directive
 {
     const DEFAULT_DEPRECATION_REASON = 'No longer supported';
 
-    const INCLUDE_NAME = 'include';
-    const IF_ARGUMENT_NAME = 'if';
-    const SKIP_NAME = 'skip';
-    const DEPRECATED_NAME = 'deprecated';
+    const INCLUDE_NAME         = 'include';
+    const IF_ARGUMENT_NAME     = 'if';
+    const SKIP_NAME            = 'skip';
+    const DEPRECATED_NAME      = 'deprecated';
     const REASON_ARGUMENT_NAME = 'reason';
 
-    /**
-     * @var array
-     */
+    /** @var Directive[] */
     public static $internalDirectives;
 
     // Schema Definitions
@@ -54,7 +57,6 @@ class Directive
     }
 
     /**
-     * @param Directive $directive
      * @return bool
      */
     public static function isSpecifiedDirective(Directive $directive)
@@ -63,11 +65,11 @@ class Directive
     }
 
     /**
-     * @return array
+     * @return Directive[]
      */
     public static function getInternalDirectives()
     {
-        if (!self::$internalDirectives) {
+        if (! self::$internalDirectives) {
             self::$internalDirectives = [
                 self::INCLUDE_NAME => new self([
                     'name' => self::INCLUDE_NAME,
@@ -77,12 +79,11 @@ class Directive
                         DirectiveLocation::FRAGMENT_SPREAD,
                         DirectiveLocation::INLINE_FRAGMENT,
                     ],
-                    'args' => [
-                        new FieldArgument([
+                    'args' => [new FieldArgument([
                             'name' => self::IF_ARGUMENT_NAME,
                             'type' => Type::nonNull(Type::boolean()),
-                            'description' => 'Included when true.'
-                        ])
+                            'description' => 'Included when true.',
+                        ]),
                     ],
                 ]),
                 self::SKIP_NAME => new self([
@@ -91,75 +92,62 @@ class Directive
                     'locations' => [
                         DirectiveLocation::FIELD,
                         DirectiveLocation::FRAGMENT_SPREAD,
-                        DirectiveLocation::INLINE_FRAGMENT
+                        DirectiveLocation::INLINE_FRAGMENT,
                     ],
-                    'args' => [
-                        new FieldArgument([
+                    'args' => [new FieldArgument([
                             'name' => self::IF_ARGUMENT_NAME,
                             'type' => Type::nonNull(Type::boolean()),
-                            'description' => 'Skipped when true.'
-                        ])
-                    ]
+                            'description' => 'Skipped when true.',
+                        ]),
+                    ],
                 ]),
                 self::DEPRECATED_NAME => new self([
                     'name' => self::DEPRECATED_NAME,
                     'description' => 'Marks an element of a GraphQL schema as no longer supported.',
                     'locations' => [
                         DirectiveLocation::FIELD_DEFINITION,
-                        DirectiveLocation::ENUM_VALUE
+                        DirectiveLocation::ENUM_VALUE,
                     ],
-                    'args' => [
-                        new FieldArgument([
+                    'args' => [new FieldArgument([
                             'name' => self::REASON_ARGUMENT_NAME,
                             'type' => Type::string(),
                             'description' =>
                                 'Explains why this element was deprecated, usually also including a ' .
                                 'suggestion for how to access supported similar data. Formatted ' .
                                 'in [Markdown](https://daringfireball.net/projects/markdown/).',
-                            'defaultValue' => self::DEFAULT_DEPRECATION_REASON
-                        ])
-                    ]
-                ])
+                            'defaultValue' => self::DEFAULT_DEPRECATION_REASON,
+                        ]),
+                    ],
+                ]),
             ];
         }
         return self::$internalDirectives;
     }
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public $name;
 
-    /**
-     * @var string|null
-     */
+    /** @var string|null */
     public $description;
 
     /**
      * Values from self::$locationMap
      *
-     * @var array
+     * @var string[]
      */
     public $locations;
 
-    /**
-     * @var FieldArgument[]
-     */
+    /** @var FieldArgument[] */
     public $args;
 
-    /**
-     * @var DirectiveDefinitionNode|null
-     */
+    /** @var DirectiveDefinitionNode|null */
     public $astNode;
 
-    /**
-     * @var array
-     */
+    /** @var mixed[] */
     public $config;
 
     /**
-     * Directive constructor.
-     * @param array $config
+     * @param mixed[] $config
      */
     public function __construct(array $config)
     {

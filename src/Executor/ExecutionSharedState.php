@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Executor;
 
 use GraphQL\Language\AST\FieldNode;
@@ -13,7 +16,6 @@ use GraphQL\Type\Definition\Type;
  */
 class ExecutionSharedState
 {
-
     /** @var FieldNode[] */
     public $fieldNodes;
 
@@ -29,7 +31,7 @@ class ExecutionSharedState
     /** @var SelectionSetNode|null */
     public $mergedSelectionSet;
 
-    /** @var array */
+    /** @var Execution[][] */
     public $executions = [];
 
     /** @var ObjectType|null */
@@ -47,12 +49,15 @@ class ExecutionSharedState
     /** @var ResolveInfo|null */
     public $resolveInfoIfType;
 
+    /**
+     * @param FieldNode[]  $fieldNodes
+     * @param mixed[]|null $argumentValueMap
+     */
     public function __construct(array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap)
     {
-        $this->fieldNodes = $fieldNodes;
-        $this->fieldName = $fieldName;
-        $this->resultName = $resultName;
+        $this->fieldNodes       = $fieldNodes;
+        $this->fieldName        = $fieldName;
+        $this->resultName       = $resultName;
         $this->argumentValueMap = $argumentValueMap;
     }
-
 }

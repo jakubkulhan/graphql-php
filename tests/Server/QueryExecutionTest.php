@@ -1,11 +1,12 @@
 <?php
+
+declare(strict_types=1);
+
 namespace GraphQL\Tests\Server;
 
-use GraphQL\Deferred;
 use GraphQL\Error\Debug;
 use GraphQL\Error\Error;
 use GraphQL\Error\InvariantViolation;
-use GraphQL\Error\UserError;
 use GraphQL\Executor\ExecutionResult;
 use GraphQL\Language\AST\DocumentNode;
 use GraphQL\Language\Parser;
@@ -16,17 +17,16 @@ use GraphQL\Server\ServerConfig;
 use GraphQL\Validator\DocumentValidator;
 use GraphQL\Validator\Rules\CustomValidationRule;
 use GraphQL\Validator\ValidationContext;
+use function count;
 
 class QueryExecutionTest extends TestCase
 {
-    /**
-     * @var ServerConfig
-     */
+    /** @var ServerConfig */
     private $config;
 
     public function setUp()
     {
-        $schema = $this->buildSchema();
+        $schema       = $this->buildSchema();
         $this->config = ServerConfig::create()
             ->setSchema($schema);
     }
@@ -36,9 +36,7 @@ class QueryExecutionTest extends TestCase
         $query = '{f1}';
 
         $expected = [
-            'data' => [
-                'f1' => 'f1'
-            ]
+            'data' => ['f1' => 'f1'],
         ];
 
         $this->assertQueryResultEquals($expected, $query);
@@ -72,15 +70,15 @@ class QueryExecutionTest extends TestCase
         $expected = [
             'data' => [
                 'fieldWithException' => null,
-                'f1' => 'f1'
+                'f1' => 'f1',
             ],
             'errors' => [
                 [
                     'message' => 'This is the exception we want',
                     'path' => ['fieldWithException'],
-                    'trace' => []
-                ]
-            ]
+                    'trace' => [],
+                ],
+            ],
         ];
 
         $result = $this->executeQuery($query)->toArray();
@@ -90,7 +88,7 @@ class QueryExecutionTest extends TestCase
     public function testPassesRootValueAndContext()
     {
         $rootValue = 'myRootValue';
-        $context = new \stdClass();
+        $context   = new \stdClass();
 
         $this->config
             ->setContext($context)
@@ -102,7 +100,7 @@ class QueryExecutionTest extends TestCase
         }
         ';
 
-        $this->assertTrue(!isset($context->testedRootValue));
+        $this->assertTrue(! isset($context->testedRootValue));
         $this->executeQuery($query);
         $this->assertSame($rootValue, $context->testedRootValue);
     }
@@ -110,46 +108,45 @@ class QueryExecutionTest extends TestCase
     public function testPassesVariables()
     {
         $variables = ['a' => 'a', 'b' => 'b'];
-        $query = '
+        $query     = '
             query ($a: String!, $b: String!) {
                 a: fieldWithArg(arg: $a)
                 b: fieldWithArg(arg: $b)
             }
         ';
-        $expected = [
+        $expected  = [
             'data' => [
                 'a' => 'a',
-                'b' => 'b'
-            ]
+                'b' => 'b',
+            ],
         ];
         $this->assertQueryResultEquals($expected, $query, $variables);
     }
 
     public function testPassesCustomValidationRules()
     {
-        $query = '
+        $query    = '
             {nonExistentField}
         ';
         $expected = [
             'errors' => [
-                ['message' => 'Cannot query field "nonExistentField" on type "Query".']
-            ]
+                ['message' => 'Cannot query field "nonExistentField" on type "Query".'],
+            ],
         ];
 
         $this->assertQueryResultEquals($expected, $query);
 
         $called = false;
 
-        $rules = [
-            new CustomValidationRule('SomeRule', function() use (&$called) {
+        $rules = [new CustomValidationRule('SomeRule', function () use (&$called) {
                 $called = true;
                 return [];
-            })
+        }),
         ];
 
         $this->config->setValidationRules($rules);
         $expected = [
-            'data' => new \stdClass()
+            'data' => new \stdClass(),
         ];
         $this->assertQueryResultEquals($expected, $query);
         $this->assertTrue($called);
@@ -160,10 +157,10 @@ class QueryExecutionTest extends TestCase
         $called = false;
         $params = $doc = $operationType = null;
 
-        $this->config->setValidationRules(function($p, $d, $o) use (&$called, &$params, &$doc, &$operationType) {
-            $called = true;
-            $params = $p;
-            $doc = $d;
+        $this->config->setValidationRules(function ($p, $d, $o) use (&$called, &$params, &$doc, &$operationType) {
+            $called        = true;
+            $params        = $p;
+            $doc           = $d;
             $operationType = $o;
             return [];
         });
@@ -178,23 +175,22 @@ class QueryExecutionTest extends TestCase
 
     public function testAllowsDifferentValidationRulesDependingOnOperation()
     {
-        $q1 = '{f1}';
-        $q2 = '{invalid}';
+        $q1      = '{f1}';
+        $q2      = '{invalid}';
         $called1 = false;
         $called2 = false;
 
-        $this->config->setValidationRules(function(OperationParams $params) use ($q1, $q2, &$called1, &$called2) {
+        $this->config->setValidationRules(function (OperationParams $params) use ($q1, $q2, &$called1, &$called2) {
             if ($params->query === $q1) {
                 $called1 = true;
                 return DocumentValidator::allRules();
-            } else {
-                $called2 = true;
-                return [
-                    new CustomValidationRule('MyRule', function(ValidationContext $context) {
-                        $context->reportError(new Error("This is the error we are looking for!"));
-                    })
-                ];
             }
+
+            $called2 = true;
+            return [new CustomValidationRule('MyRule', function (ValidationContext $context) {
+                    $context->reportError(new Error('This is the error we are looking for!'));
+            }),
+            ];
         });
 
         $expected = ['data' => ['f1' => 'f1']];
@@ -202,8 +198,8 @@ class QueryExecutionTest extends TestCase
         $this->assertTrue($called1);
         $this->assertFalse($called2);
 
-        $called1 = false;
-        $called2 = false;
+        $called1  = false;
+        $called2  = false;
         $expected = ['errors' => [['message' => 'This is the error we are looking for!']]];
         $this->assertQueryResultEquals($expected, $q2);
         $this->assertFalse($called1);
@@ -213,7 +209,7 @@ class QueryExecutionTest extends TestCase
     public function testAllowsSkippingValidation()
     {
         $this->config->setValidationRules([]);
-        $query = '{nonExistentField}';
+        $query    = '{nonExistentField}';
         $expected = ['data' => new \stdClass()];
         $this->assertQueryResultEquals($expected, $query);
     }
@@ -226,9 +222,9 @@ class QueryExecutionTest extends TestCase
             'errors' => [
                 [
                     'message' => 'Persisted queries are not supported by this server',
-                    'category' => 'request'
-                ]
-            ]
+                    'category' => 'request',
+                ],
+            ],
         ];
         $this->assertEquals($expected, $result->toArray());
     }
@@ -236,12 +232,8 @@ class QueryExecutionTest extends TestCase
     public function testBatchedQueriesAreDisabledByDefault()
     {
         $batch = [
-            [
-                'query' => '{invalid}'
-            ],
-            [
-                'query' => '{f1,fieldWithException}'
-            ]
+            ['query' => '{invalid}'],
+            ['query' => '{f1,fieldWithException}'],
         ];
 
         $result = $this->executeBatchedQuery($batch);
@@ -251,17 +243,17 @@ class QueryExecutionTest extends TestCase
                 'errors' => [
                     [
                         'message' => 'Batched queries are not supported by this server',
-                        'category' => 'request'
-                    ]
-                ]
+                        'category' => 'request',
+                    ],
+                ],
             ],
             [
                 'errors' => [
                     [
                         'message' => 'Batched queries are not supported by this server',
-                        'category' => 'request'
-                    ]
-                ]
+                        'category' => 'request',
+                    ],
+                ],
             ],
         ];
 
@@ -277,9 +269,9 @@ class QueryExecutionTest extends TestCase
             'errors' => [
                 [
                     'message' => 'GET supports only query operation',
-                    'category' => 'request'
-                ]
-            ]
+                    'category' => 'request',
+                ],
+            ],
         ];
 
         $result = $this->executeQuery($mutation, null, true);
@@ -289,7 +281,7 @@ class QueryExecutionTest extends TestCase
     public function testAllowsPersistentQueries()
     {
         $called = false;
-        $this->config->setPersistentQueryLoader(function($queryId, OperationParams $params) use (&$called) {
+        $this->config->setPersistentQueryLoader(function ($queryId, OperationParams $params) use (&$called) {
             $called = true;
             $this->assertEquals('some-id', $queryId);
             return '{f1}';
@@ -299,15 +291,13 @@ class QueryExecutionTest extends TestCase
         $this->assertTrue($called);
 
         $expected = [
-            'data' => [
-                'f1' => 'f1'
-            ]
+            'data' => ['f1' => 'f1'],
         ];
         $this->assertEquals($expected, $result->toArray());
 
         // Make sure it allows returning document node:
         $called = false;
-        $this->config->setPersistentQueryLoader(function($queryId, OperationParams $params) use (&$called) {
+        $this->config->setPersistentQueryLoader(function ($queryId, OperationParams $params) use (&$called) {
             $called = true;
             $this->assertEquals('some-id', $queryId);
             return Parser::parse('{f1}');
@@ -321,10 +311,10 @@ class QueryExecutionTest extends TestCase
     {
         $this->setExpectedException(
             InvariantViolation::class,
-            'Persistent query loader must return query string or instance of GraphQL\Language\AST\DocumentNode '.
+            'Persistent query loader must return query string or instance of GraphQL\Language\AST\DocumentNode ' .
             'but got: {"err":"err"}'
         );
-        $this->config->setPersistentQueryLoader(function($queryId, OperationParams $params) use (&$called) {
+        $this->config->setPersistentQueryLoader(function ($queryId, OperationParams $params) use (&$called) {
             return ['err' => 'err'];
         });
         $this->executePersistedQuery('some-id');
@@ -332,56 +322,55 @@ class QueryExecutionTest extends TestCase
 
     public function testPersistedQueriesAreStillValidatedByDefault()
     {
-        $this->config->setPersistentQueryLoader(function() {
+        $this->config->setPersistentQueryLoader(function () {
             return '{invalid}';
         });
-        $result = $this->executePersistedQuery('some-id');
+        $result   = $this->executePersistedQuery('some-id');
         $expected = [
             'errors' => [
                 [
                     'message' => 'Cannot query field "invalid" on type "Query".',
                     'locations' => [ ['line' => 1, 'column' => 2] ],
-                    'category' => 'graphql'
-                ]
-            ]
+                    'category' => 'graphql',
+                ],
+            ],
         ];
         $this->assertEquals($expected, $result->toArray());
-
     }
 
     public function testAllowSkippingValidationForPersistedQueries()
     {
         $this->config
-            ->setPersistentQueryLoader(function($queryId) {
+            ->setPersistentQueryLoader(function ($queryId) {
                 if ($queryId === 'some-id') {
                     return '{invalid}';
-                } else {
-                    return '{invalid2}';
                 }
+
+                return '{invalid2}';
             })
-            ->setValidationRules(function(OperationParams $params) {
+            ->setValidationRules(function (OperationParams $params) {
                 if ($params->queryId === 'some-id') {
                     return [];
-                } else {
-                    return DocumentValidator::allRules();
                 }
+
+                return DocumentValidator::allRules();
             });
 
-        $result = $this->executePersistedQuery('some-id');
+        $result   = $this->executePersistedQuery('some-id');
         $expected = [
-            'data' => new \stdClass()
+            'data' => new \stdClass(),
         ];
         $this->assertEquals($expected, $result->toArray());
 
-        $result = $this->executePersistedQuery('some-other-id');
+        $result   = $this->executePersistedQuery('some-other-id');
         $expected = [
             'errors' => [
                 [
                     'message' => 'Cannot query field "invalid2" on type "Query".',
                     'locations' => [ ['line' => 1, 'column' => 2] ],
-                    'category' => 'graphql'
-                ]
-            ]
+                    'category' => 'graphql',
+                ],
+            ],
         ];
         $this->assertEquals($expected, $result->toArray());
     }
@@ -392,7 +381,7 @@ class QueryExecutionTest extends TestCase
             InvariantViolation::class,
             'Expecting validation rules to be array or callable returning array, but got: instance of stdClass'
         );
-        $this->config->setValidationRules(function(OperationParams $params) {
+        $this->config->setValidationRules(function (OperationParams $params) {
             return new \stdClass();
         });
         $this->executeQuery('{f1}');
@@ -403,12 +392,8 @@ class QueryExecutionTest extends TestCase
         $this->config->setQueryBatching(true);
 
         $batch = [
-            [
-                'query' => '{invalid}'
-            ],
-            [
-                'query' => '{f1,fieldWithException}'
-            ],
+            ['query' => '{invalid}'],
+            ['query' => '{f1,fieldWithException}'],
             [
                 'query' => '
                     query ($a: String!, $b: String!) {
@@ -417,30 +402,30 @@ class QueryExecutionTest extends TestCase
                     }
                 ',
                 'variables' => ['a' => 'a', 'b' => 'b'],
-            ]
+            ],
         ];
 
         $result = $this->executeBatchedQuery($batch);
 
         $expected = [
             [
-                'errors' => [['message' => 'Cannot query field "invalid" on type "Query".']]
+                'errors' => [['message' => 'Cannot query field "invalid" on type "Query".']],
             ],
             [
                 'data' => [
                     'f1' => 'f1',
-                    'fieldWithException' => null
+                    'fieldWithException' => null,
                 ],
                 'errors' => [
-                    ['message' => 'This is the exception we want']
-                ]
+                    ['message' => 'This is the exception we want'],
+                ],
             ],
             [
                 'data' => [
                     'a' => 'a',
-                    'b' => 'b'
-                ]
-            ]
+                    'b' => 'b',
+                ],
+            ],
         ];
 
         $this->assertArraySubset($expected[0], $result[0]->toArray());
@@ -451,15 +436,9 @@ class QueryExecutionTest extends TestCase
     public function testDeferredsAreSharedAmongAllBatchedQueries()
     {
         $batch = [
-            [
-                'query' => '{dfd(num: 1)}'
-            ],
-            [
-                'query' => '{dfd(num: 2)}'
-            ],
-            [
-                'query' => '{dfd(num: 3)}',
-            ]
+            ['query' => '{dfd(num: 1)}'],
+            ['query' => '{dfd(num: 2)}'],
+            ['query' => '{dfd(num: 3)}'],
         ];
 
         $calls = [];
@@ -468,13 +447,13 @@ class QueryExecutionTest extends TestCase
             ->setQueryBatching(true)
             ->setRootValue('1')
             ->setContext([
-                'buffer' => function($num) use (&$calls) {
-                    $calls[] = "buffer: $num";
+                'buffer' => function ($num) use (&$calls) {
+                    $calls[] = 'buffer: ' . $num;
                 },
-                'load' => function($num) use (&$calls) {
-                    $calls[] = "load: $num";
-                    return "loaded: $num";
-                }
+                'load' => function ($num) use (&$calls) {
+                    $calls[] = 'load: ' . $num;
+                    return 'loaded: ' . $num;
+                },
             ]);
 
         $result = $this->executeBatchedQuery($batch);
@@ -491,19 +470,13 @@ class QueryExecutionTest extends TestCase
 
         $expected = [
             [
-                'data' => [
-                    'dfd' => 'loaded: 1'
-                ]
+                'data' => ['dfd' => 'loaded: 1'],
             ],
             [
-                'data' => [
-                    'dfd' => 'loaded: 2'
-                ]
+                'data' => ['dfd' => 'loaded: 2'],
             ],
             [
-                'data' => [
-                    'dfd' => 'loaded: 3'
-                ]
+                'data' => ['dfd' => 'loaded: 3'],
             ],
         ];
 
@@ -514,7 +487,7 @@ class QueryExecutionTest extends TestCase
 
     public function testValidatesParamsBeforeExecution()
     {
-        $op = OperationParams::create(['queryBad' => '{f1}']);
+        $op     = OperationParams::create(['queryBad' => '{f1}']);
         $helper = new Helper();
         $result = $helper->executeOperation($this->config, $op);
         $this->assertInstanceOf(ExecutionResult::class, $result);
@@ -538,10 +511,10 @@ class QueryExecutionTest extends TestCase
         $called = false;
         $params = $doc = $operationType = null;
 
-        $this->config->setContext(function($p, $d, $o) use (&$called, &$params, &$doc, &$operationType) {
-            $called = true;
-            $params = $p;
-            $doc = $d;
+        $this->config->setContext(function ($p, $d, $o) use (&$called, &$params, &$doc, &$operationType) {
+            $called        = true;
+            $params        = $p;
+            $doc           = $d;
             $operationType = $o;
         });
 
@@ -558,10 +531,10 @@ class QueryExecutionTest extends TestCase
         $called = false;
         $params = $doc = $operationType = null;
 
-        $this->config->setRootValue(function($p, $d, $o) use (&$called, &$params, &$doc, &$operationType) {
-            $called = true;
-            $params = $p;
-            $doc = $d;
+        $this->config->setRootValue(function ($p, $d, $o) use (&$called, &$params, &$doc, &$operationType) {
+            $called        = true;
+            $params        = $p;
+            $doc           = $d;
             $operationType = $o;
         });
 
@@ -576,20 +549,20 @@ class QueryExecutionTest extends TestCase
     public function testAppliesErrorFormatter()
     {
         $called = false;
-        $error = null;
-        $this->config->setErrorFormatter(function($e) use (&$called, &$error) {
+        $error  = null;
+        $this->config->setErrorFormatter(function ($e) use (&$called, &$error) {
             $called = true;
-            $error = $e;
+            $error  = $e;
             return ['test' => 'formatted'];
         });
 
         $result = $this->executeQuery('{fieldWithException}');
         $this->assertFalse($called);
         $formatted = $result->toArray();
-        $expected = [
+        $expected  = [
             'errors' => [
-                ['test' => 'formatted']
-            ]
+                ['test' => 'formatted'],
+            ],
         ];
         $this->assertTrue($called);
         $this->assertArraySubset($expected, $formatted);
@@ -597,28 +570,28 @@ class QueryExecutionTest extends TestCase
 
         // Assert debugging still works even with custom formatter
         $formatted = $result->toArray(Debug::INCLUDE_TRACE);
-        $expected = [
+        $expected  = [
             'errors' => [
                 [
                     'test' => 'formatted',
-                    'trace' => []
-                ]
-            ]
+                    'trace' => [],
+                ],
+            ],
         ];
         $this->assertArraySubset($expected, $formatted);
     }
 
     public function testAppliesErrorsHandler()
     {
-        $called = false;
-        $errors = null;
+        $called    = false;
+        $errors    = null;
         $formatter = null;
-        $this->config->setErrorsHandler(function($e, $f) use (&$called, &$errors, &$formatter) {
-            $called = true;
-            $errors = $e;
+        $this->config->setErrorsHandler(function ($e, $f) use (&$called, &$errors, &$formatter) {
+            $called    = true;
+            $errors    = $e;
             $formatter = $f;
             return [
-                ['test' => 'handled']
+                ['test' => 'handled'],
             ];
         });
 
@@ -626,10 +599,10 @@ class QueryExecutionTest extends TestCase
 
         $this->assertFalse($called);
         $formatted = $result->toArray();
-        $expected = [
+        $expected  = [
             'errors' => [
-                ['test' => 'handled']
-            ]
+                ['test' => 'handled'],
+            ],
         ];
         $this->assertTrue($called);
         $this->assertArraySubset($expected, $formatted);
@@ -641,7 +614,7 @@ class QueryExecutionTest extends TestCase
 
     private function executePersistedQuery($queryId, $variables = null)
     {
-        $op = OperationParams::create(['queryId' => $queryId, 'variables' => $variables]);
+        $op     = OperationParams::create(['queryId' => $queryId, 'variables' => $variables]);
         $helper = new Helper();
         $result = $helper->executeOperation($this->config, $op);
         $this->assertInstanceOf(ExecutionResult::class, $result);
@@ -650,13 +623,16 @@ class QueryExecutionTest extends TestCase
 
     private function executeQuery($query, $variables = null, $readonly = false)
     {
-        $op = OperationParams::create(['query' => $query, 'variables' => $variables], $readonly);
+        $op     = OperationParams::create(['query' => $query, 'variables' => $variables], $readonly);
         $helper = new Helper();
         $result = $helper->executeOperation($this->config, $op);
         $this->assertInstanceOf(ExecutionResult::class, $result);
         return $result;
     }
 
+    /**
+     * @param mixed[] $qs
+     */
     private function executeBatchedQuery(array $qs)
     {
         $batch = [];
@@ -669,7 +645,7 @@ class QueryExecutionTest extends TestCase
         $this->assertCount(count($qs), $result);
 
         foreach ($result as $index => $entry) {
-            $this->assertInstanceOf(ExecutionResult::class, $entry, "Result at $index is not an instance of " . ExecutionResult::class);
+            $this->assertInstanceOf(ExecutionResult::class, $entry, 'Result at ' . $index . ' is not an instance of ' . ExecutionResult::class);
         }
         return $result;
     }

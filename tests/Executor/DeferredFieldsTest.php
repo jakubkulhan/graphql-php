@@ -1,6 +1,8 @@
 <?php
-namespace GraphQL\Tests\Executor;
 
+declare(strict_types=1);
+
+namespace GraphQL\Tests\Executor;
 
 use GraphQL\Deferred;
 use GraphQL\Executor\Executor;
@@ -10,23 +12,32 @@ use GraphQL\Type\Definition\ResolveInfo;
 use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Schema;
 use GraphQL\Utils\Utils;
+use function in_array;
 
 class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
 {
+    /** @var ObjectType */
     private $userType;
 
+    /** @var ObjectType */
     private $storyType;
 
+    /** @var ObjectType */
     private $categoryType;
 
+    /** @var string[][] */
     private $path;
 
+    /** @var mixed */
     private $storyDataSource;
 
+    /** @var mixed */
     private $userDataSource;
 
+    /** @var mixed */
     private $categoryDataSource;
 
+    /** @var ObjectType */
     private $queryType;
 
     public function setUp()
@@ -53,10 +64,10 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
         $this->categoryDataSource = [
             ['id' => 1, 'name' => 'Category #1', 'topStoryId' => 8],
             ['id' => 2, 'name' => 'Category #2', 'topStoryId' => 3],
-            ['id' => 3, 'name' => 'Category #3', 'topStoryId' => 9]
+            ['id' => 3, 'name' => 'Category #3', 'topStoryId' => 9],
         ];
 
-        $this->path = [];
+        $this->path     = [];
         $this->userType = new ObjectType([
             'name' => 'User',
             'fields' => function () {
@@ -66,7 +77,7 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                         'resolve' => function ($user, $args, $context, ResolveInfo $info) {
                             $this->path[] = $info->path;
                             return $user['name'];
-                        }
+                        },
                     ],
                     'bestFriend' => [
                         'type' => $this->userType,
@@ -79,10 +90,10 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                                     return $entry['id'] === $user['bestFriendId'];
                                 });
                             });
-                        }
-                    ]
+                        },
+                    ],
                 ];
-            }
+            },
         ]);
 
         $this->storyType = new ObjectType([
@@ -93,7 +104,7 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                     'resolve' => function ($entry, $args, $context, ResolveInfo $info) {
                         $this->path[] = $info->path;
                         return $entry['title'];
-                    }
+                    },
                 ],
                 'author' => [
                     'type' => $this->userType,
@@ -106,9 +117,9 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                                 return $entry['id'] === $story['authorId'];
                             });
                         });
-                    }
-                ]
-            ]
+                    },
+                ],
+            ],
         ]);
 
         $this->categoryType = new ObjectType([
@@ -119,7 +130,7 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                     'resolve' => function ($category, $args, $context, ResolveInfo $info) {
                         $this->path[] = $info->path;
                         return $category['name'];
-                    }
+                    },
                 ],
 
                 'stories' => [
@@ -129,7 +140,7 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                         return Utils::filter($this->storyDataSource, function ($story) use ($category) {
                             return in_array($category['id'], $story['categoryIds']);
                         });
-                    }
+                    },
                 ],
                 'topStory' => [
                     'type' => $this->storyType,
@@ -142,9 +153,9 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                                 return $story['id'] === $category['topStoryId'];
                             });
                         });
-                    }
-                ]
-            ]
+                    },
+                ],
+            ],
         ]);
 
         $this->queryType = new ObjectType([
@@ -157,23 +168,23 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                         return Utils::filter($this->storyDataSource, function ($story) {
                             return $story['id'] % 2 === 1;
                         });
-                    }
+                    },
                 ],
                 'featuredCategory' => [
                     'type' => $this->categoryType,
                     'resolve' => function ($val, $args, $context, ResolveInfo $info) {
                         $this->path[] = $info->path;
                         return $this->categoryDataSource[0];
-                    }
+                    },
                 ],
                 'categories' => [
                     'type' => Type::listOf($this->categoryType),
                     'resolve' => function ($val, $args, $context, ResolveInfo $info) {
                         $this->path[] = $info->path;
                         return $this->categoryDataSource;
-                    }
-                ]
-            ]
+                    },
+                ],
+            ],
         ]);
 
         parent::setUp();
@@ -201,7 +212,7 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
         ');
 
         $schema = new Schema([
-            'query' => $this->queryType
+            'query' => $this->queryType,
         ]);
 
         $expected = [
@@ -219,9 +230,9 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                         ['title' => 'Story #4', 'author' => ['name' => 'Joe']],
                         ['title' => 'Story #6', 'author' => ['name' => 'Jane']],
                         ['title' => 'Story #8', 'author' => ['name' => 'John']],
-                    ]
-                ]
-            ]
+                    ],
+                ],
+            ],
         ];
 
         $result = Executor::execute($schema, $query);
@@ -291,7 +302,7 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
         ');
 
         $schema = new Schema([
-            'query' => $this->queryType
+            'query' => $this->queryType,
         ]);
 
         $author1 = ['name' => 'John', 'bestFriend' => ['name' => 'Dirk']];
@@ -305,8 +316,8 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                     ['name' => 'Category #1', 'topStory' => ['title' => 'Story #8', 'author' => $author1]],
                     ['name' => 'Category #2', 'topStory' => ['title' => 'Story #3', 'author' => $author3]],
                     ['name' => 'Category #3', 'topStory' => ['title' => 'Story #9', 'author' => $author2]],
-                ]
-            ]
+                ],
+            ],
         ];
 
         $result = Executor::execute($schema, $query);
@@ -359,7 +370,7 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                         'resolve' => function ($v, $a, $c, ResolveInfo $info) {
                             $this->path[] = $info->path;
                             return 'sync';
-                        }
+                        },
                     ],
                     'deferred' => [
                         'type' => Type::string(),
@@ -370,14 +381,14 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                                 $this->path[] = ['!dfd for: ', $info->path];
                                 return 'deferred';
                             });
-                        }
+                        },
                     ],
                     'nest' => [
                         'type' => $complexType,
                         'resolve' => function ($v, $a, $c, ResolveInfo $info) {
                             $this->path[] = $info->path;
                             return [];
-                        }
+                        },
                     ],
                     'deferredNest' => [
                         'type' => $complexType,
@@ -388,17 +399,15 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                                 $this->path[] = ['!dfd nest for: ', $info->path];
                                 return [];
                             });
-                        }
-                    ]
+                        },
+                    ],
                 ];
-            }
+            },
         ]);
 
-        $schema = new Schema([
-            'query' => $complexType
-        ]);
+        $schema = new Schema(['query' => $complexType]);
 
-        $query = Parser::parse('
+        $query    = Parser::parse('
             {
                 nest {
                     sync
@@ -426,7 +435,7 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                 }
             }
         ');
-        $result = Executor::execute($schema, $query);
+        $result   = Executor::execute($schema, $query);
         $expected = [
             'data' => [
                 'nest' => [
@@ -434,58 +443,58 @@ class DeferredFieldsTest extends \PHPUnit_Framework_TestCase
                     'deferred' => 'deferred',
                     'nest' => [
                         'sync' => 'sync',
-                        'deferred' => 'deferred'
+                        'deferred' => 'deferred',
                     ],
                     'deferredNest' => [
                         'sync' => 'sync',
-                        'deferred' => 'deferred'
-                    ]
+                        'deferred' => 'deferred',
+                    ],
                 ],
                 'deferredNest' => [
                     'sync' => 'sync',
                     'deferred' => 'deferred',
                     'nest' => [
                         'sync' => 'sync',
-                        'deferred' => 'deferred'
+                        'deferred' => 'deferred',
                     ],
                     'deferredNest' => [
                         'sync' => 'sync',
-                        'deferred' => 'deferred'
-                    ]
-                ]
-            ]
+                        'deferred' => 'deferred',
+                    ],
+                ],
+            ],
         ];
 
         $this->assertEquals($expected, $result->toArray());
 
         $expectedPath = [
-            ["nest"],
-            ["deferredNest"],
-            ["nest", "sync"],
-            ["nest", "deferred"],
-            ["nest", "nest"],
-            ["nest", "deferredNest"],
-            ["nest", "nest", "sync"],
-            ["nest", "nest", "deferred"],
-            ["!dfd nest for: ", ["deferredNest"]],
-            ["!dfd for: ", ["nest", "deferred"]],
-            ["!dfd nest for: ", ["nest", "deferredNest"]],
-            ["!dfd for: ", ["nest", "nest", "deferred"]],
-            ["deferredNest", "sync"],
-            ["deferredNest", "deferred"],
-            ["deferredNest", "nest"],
-            ["deferredNest", "deferredNest"],
-            ["deferredNest", "nest", "sync"],
-            ["deferredNest", "nest", "deferred"],
-            ["nest", "deferredNest", "sync"],
-            ["nest", "deferredNest", "deferred"],
-            ["!dfd for: ", ["deferredNest", "deferred"]],
-            ["!dfd nest for: ", ["deferredNest", "deferredNest"]],
-            ["!dfd for: ", ["deferredNest", "nest", "deferred"]],
-            ["!dfd for: ", ["nest", "deferredNest", "deferred"]],
-            ["deferredNest", "deferredNest", "sync"],
-            ["deferredNest", "deferredNest", "deferred"],
-            ["!dfd for: ", ["deferredNest", "deferredNest", "deferred"]],
+            ['nest'],
+            ['deferredNest'],
+            ['nest', 'sync'],
+            ['nest', 'deferred'],
+            ['nest', 'nest'],
+            ['nest', 'deferredNest'],
+            ['nest', 'nest', 'sync'],
+            ['nest', 'nest', 'deferred'],
+            ['!dfd nest for: ', ['deferredNest']],
+            ['!dfd for: ', ['nest', 'deferred']],
+            ['!dfd nest for: ', ['nest', 'deferredNest']],
+            ['!dfd for: ', ['nest', 'nest', 'deferred']],
+            ['deferredNest', 'sync'],
+            ['deferredNest', 'deferred'],
+            ['deferredNest', 'nest'],
+            ['deferredNest', 'deferredNest'],
+            ['deferredNest', 'nest', 'sync'],
+            ['deferredNest', 'nest', 'deferred'],
+            ['nest', 'deferredNest', 'sync'],
+            ['nest', 'deferredNest', 'deferred'],
+            ['!dfd for: ', ['deferredNest', 'deferred']],
+            ['!dfd nest for: ', ['deferredNest', 'deferredNest']],
+            ['!dfd for: ', ['deferredNest', 'nest', 'deferred']],
+            ['!dfd for: ', ['nest', 'deferredNest', 'deferred']],
+            ['deferredNest', 'deferredNest', 'sync'],
+            ['deferredNest', 'deferredNest', 'deferred'],
+            ['!dfd for: ', ['deferredNest', 'deferredNest', 'deferred']],
         ];
 
         $this->assertEquals($expectedPath, $this->path);
