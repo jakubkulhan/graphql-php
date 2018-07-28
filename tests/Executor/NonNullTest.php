@@ -313,6 +313,20 @@ class NonNullTest extends \PHPUnit_Framework_TestCase
         $ast = Parser::parse($doc);
 
         $expected = [
+            'errors' => [
+                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(4, 11)]),
+                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(7, 13)]),
+                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(16, 11)]),
+                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(19, 13)]),
+                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(5, 11)]),
+                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(11, 13)]),
+                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(8, 13)]),
+                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(17, 11)]),
+                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(23, 13)]),
+                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(20, 13)]),
+                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(12, 13)]),
+                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(24, 13)]),
+            ],
             'data' => [
                 'nest' => [
                     'sync' => null,
@@ -339,23 +353,11 @@ class NonNullTest extends \PHPUnit_Framework_TestCase
                     ],
                 ],
             ],
-            'errors' => [
-                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(4, 11)]),
-                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(7, 13)]),
-                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(11, 13)]),
-                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(16, 11)]),
-                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(19, 13)]),
-                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(5, 11)]),
-                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(8, 13)]),
-                FormattedError::create($this->syncError->getMessage(), [new SourceLocation(23, 13)]),
-                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(12, 13)]),
-                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(17, 11)]),
-                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(20, 13)]),
-                FormattedError::create($this->promiseError->getMessage(), [new SourceLocation(24, 13)]),
-            ]
         ];
 
-        $this->assertArraySubset($expected, Executor::execute($this->schema, $ast, $this->throwingData, null, [], 'Q')->toArray());
+        $result = Executor::execute($this->schema, $ast, $this->throwingData, null, [], 'Q');
+
+        $this->assertArraySubset($expected, $result->toArray());
     }
 
     public function testNullsTheFirstNullableObjectAfterAFieldThrowsInALongChainOfFieldsThatAreNonNull()
@@ -412,21 +414,22 @@ class NonNullTest extends \PHPUnit_Framework_TestCase
         $ast = Parser::parse($doc);
 
         $expected = [
+            'errors' => [
+                FormattedError::create($this->nonNullSyncError->getMessage(), [new SourceLocation(8, 19)]),
+                FormattedError::create($this->nonNullSyncError->getMessage(), [new SourceLocation(19, 19)]),
+                FormattedError::create($this->nonNullPromiseError->getMessage(), [new SourceLocation(30, 19)]),
+                FormattedError::create($this->nonNullPromiseError->getMessage(), [new SourceLocation(41, 19)]),
+            ],
             'data' => [
                 'nest' => null,
                 'promiseNest' => null,
                 'anotherNest' => null,
                 'anotherPromiseNest' => null,
             ],
-            'errors' => [
-                FormattedError::create($this->nonNullSyncError->getMessage(), [new SourceLocation(8, 19)]),
-                FormattedError::create($this->nonNullSyncError->getMessage(), [new SourceLocation(19, 19)]),
-                FormattedError::create($this->nonNullPromiseError->getMessage(), [new SourceLocation(30, 19)]),
-                FormattedError::create($this->nonNullPromiseError->getMessage(), [new SourceLocation(41, 19)]),
-            ]
         ];
 
-        $this->assertArraySubset($expected, Executor::execute($this->schema, $ast, $this->throwingData, null, [], 'Q')->toArray());
+        $result = Executor::execute($this->schema, $ast, $this->throwingData, null, [], 'Q');
+        $this->assertArraySubset($expected, $result->toArray());
     }
 
     public function testNullsANullableFieldThatSynchronouslyReturnsNull()

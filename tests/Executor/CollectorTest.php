@@ -129,13 +129,6 @@ class CollectorTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 StarWarsSchema::build(),
-                'query ShouldEmitErrorForRootFieldThatDoesNotExist {
-                    doesNotExist
-                }',
-                null,
-            ],
-            [
-                StarWarsSchema::build(),
                 'query ShouldEmitForInlineFragment($id: ID!) {
                     ...HumanById
                 }

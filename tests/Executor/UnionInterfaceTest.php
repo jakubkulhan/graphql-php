@@ -187,7 +187,9 @@ class UnionInterfaceTest extends \PHPUnit_Framework_TestCase
             ]
         ];
 
-        $this->assertEquals($expected, Executor::execute($this->schema, $ast, $this->john)->toArray());
+        $result = Executor::execute($this->schema, $ast, $this->john);
+
+        $this->assertEquals($expected['data'], $result->toArray()['data']);
     }
 
     /**

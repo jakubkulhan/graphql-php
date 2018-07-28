@@ -47,7 +47,19 @@ class Execution
     /** @var ResolveInfo|null */
     private $resolveInfo;
 
-    public function __construct(Executor $executor, array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap, ObjectType $type, $value, $result, $path)
+    /** @var array|null */
+    public $nullFence;
+
+    public function __construct(Executor $executor,
+                                array $fieldNodes,
+                                string $fieldName,
+                                string $resultName,
+                                ?array $argumentValueMap,
+                                ObjectType $type,
+                                $value,
+                                $result,
+                                array $path,
+                                ?array $nullFence = null)
     {
         if (!isset(self::$undefined)) {
             self::$undefined = Utils::undefined();
@@ -59,6 +71,7 @@ class Execution
         $this->value = $value;
         $this->result = $result;
         $this->path = $path;
+        $this->nullFence = $nullFence;
     }
 
     public function run()
@@ -123,7 +136,8 @@ class Execution
             $value = yield $this->completeValue(
                 $returnType,
                 $resolve($this->value, $arguments, $this->executor->contextValue, $this->resolveInfo),
-                $this->path
+                $this->path,
+                $this->nullFence
             );
 
         } catch (\Throwable $reason) {
@@ -140,7 +154,15 @@ class Execution
             $this->result->{$this->shared->resultName} = $value;
 
         } else if ($this->resolveInfo !== null && $this->resolveInfo->returnType instanceof NonNull) { // !!! $this->resolveInfo might not have been initialized yet
-            // FIXME: null parent
+            $result =& $this->executor->rootResult;
+            foreach ($this->nullFence ?? [] as $key) {
+                if (is_string($key)) {
+                    $result =& $result->{$key};
+                } else {
+                    $result =& $result[$key];
+                }
+            }
+            $result = null;
         }
     }
 
@@ -157,7 +179,7 @@ class Execution
         }
     }
 
-    private function completeValue(Type $type, $value, array $path)
+    private function completeValue(Type $type, $value, array $path, ?array $nullFence)
     {
         $nonNull = false;
         $returnValue = null;
@@ -165,18 +187,44 @@ class Execution
         if ($type instanceof NonNull) {
             $nonNull = true;
             $type = $type->getWrappedType();
+        } else {
+            $nullFence = $path;
         }
 
         // !!! $value might be promise, yield to resolve
-        if ($this->executor->promiseAdapter->isThenable($value)) {
-            $value = yield $value;
+        try {
+            if ($this->executor->promiseAdapter->isThenable($value)) {
+                $value = yield $value;
+            }
+        } catch (\Throwable $reason) {
+            $this->executor->addError(Error::createLocatedError(
+                $reason,
+                $this->shared->fieldNodes,
+                $path
+            ));
+            if ($nonNull) {
+                $returnValue = self::$undefined;
+            } else {
+                $returnValue = null;
+            }
+            goto CHECKED_RETURN;
         }
 
         if ($value === null) {
             $returnValue = $value;
             goto CHECKED_RETURN;
         } else if ($value instanceof \Throwable) {
-            throw $value;
+            $this->executor->addError(Error::createLocatedError(
+                $value,
+                $this->shared->fieldNodes,
+                $path
+            ));
+            if ($nonNull) {
+                $returnValue = self::$undefined;
+            } else {
+                $returnValue = null;
+            }
+            goto CHECKED_RETURN;
         }
 
         if ($type instanceof ListOfType) {
@@ -189,7 +237,7 @@ class Execution
                 ++$index;
                 $itemPath[$itemPathIndex] = $index; // !!! use arrays' COW instead of calling array_merge in the loop
                 try {
-                    $item = yield $this->completeValue($itemType, $item, $itemPath);
+                    $item = yield $this->completeValue($itemType, $item, $itemPath, $nullFence);
                 } catch (\Throwable $reason) {
                     $this->executor->addError(Error::createLocatedError(
                         $reason,
@@ -235,7 +283,20 @@ class Execution
             }
 
             if ($type instanceof LeafType) {
-                $returnValue = $type->serialize($value);
+                try {
+                    $returnValue = $type->serialize($value);
+                } catch (\Throwable $error) {
+                    $this->executor->addError(Error::createLocatedError(
+                        new InvariantViolation(
+                            'Expected a value of type "' . Utils::printSafe($type) . '" but received: ' . Utils::printSafe($value),
+                            0,
+                            $error
+                        ),
+                        $this->shared->fieldNodes,
+                        $path
+                    ));
+                    $returnValue = null;
+                }
                 goto CHECKED_RETURN;
 
             } else if ($type instanceof CompositeType) {
@@ -365,6 +426,7 @@ class Execution
                         $execution->value = $value;
                         $execution->result = $returnValue;
                         $execution->path = array_merge($path, [$execution->shared->resultName]);
+                        $execution->nullFence = $nullFence;
                         $execution->resolveInfo = null;
 
                         $this->executor->queue->enqueue(new ExecutionStrand($execution->run()));
@@ -379,7 +441,7 @@ class Execution
                         function (array $fieldNodes,
                                   string $fieldName,
                                   string $resultName,
-                                  ?array $argumentValueMap) use ($objectType, $value, $returnValue, $path, $cacheKey) {
+                                  ?array $argumentValueMap) use ($objectType, $value, $returnValue, $path, $cacheKey, $nullFence) {
 
                             $execution = new Execution(
                                 $this->executor,
@@ -390,7 +452,8 @@ class Execution
                                 $objectType,
                                 $value,
                                 $returnValue,
-                                array_merge($path, [$resultName])
+                                array_merge($path, [$resultName]),
+                                $nullFence
                             );
 
                             $this->shared->executions[$cacheKey][] = $execution;

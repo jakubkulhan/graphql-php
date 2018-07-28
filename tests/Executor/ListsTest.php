@@ -685,6 +685,11 @@ class ListsTest extends \PHPUnit_Framework_TestCase
         $ast = Parser::parse('{ nest { test } }');
 
         $result = Executor::execute($schema, $ast, $data);
-        $this->assertArraySubset($expected, $result->toArray($debug));
+        try {
+            $this->assertArraySubset($expected, $result->toArray($debug));
+        } catch (\Throwable $e) {
+            echo json_encode($result->toArray(true), JSON_PRETTY_PRINT), "\n";
+            throw $e;
+        }
     }
 }

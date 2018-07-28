@@ -124,28 +124,6 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
     ';
 
         $expected = [
-            'errors' => [
-                [
-                    'message' => 'Object type "Article" does not have field "hidden".',
-                    'category' => 'graphql',
-                    'locations' => [['line' => 30, 'column' => 9]]
-                ],
-                [
-                    'message' => 'Object type "Article" does not have field "notdefined".',
-                    'category' => 'graphql',
-                    'locations' => [['line' => 31, 'column' => 9]]
-                ],
-                [
-                    'message' => 'Object type "Article" does not have field "hidden".',
-                    'category' => 'graphql',
-                    'locations' => [['line' => 30, 'column' => 9]]
-                ],
-                [
-                    'message' => 'Object type "Article" does not have field "notdefined".',
-                    'category' => 'graphql',
-                    'locations' => [['line' => 31, 'column' => 9]]
-                ],
-            ],
             'data' => [
                 'feed' => [
                     ['id' => '1',

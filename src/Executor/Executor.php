@@ -8,6 +8,7 @@ use GraphQL\Executor\Promise\PromiseAdapter;
 use GraphQL\Language\AST\DocumentNode;
 use GraphQL\Language\AST\ValueNode;
 use GraphQL\Type\Definition\InputType;
+use GraphQL\Type\Definition\NonNull;
 use GraphQL\Type\Definition\ResolveInfo;
 use GraphQL\Type\Schema;
 use GraphQL\Utils\AST;
@@ -81,8 +82,11 @@ class Executor implements Runtime
     /** @var \SplQueue */
     private $schedule;
 
-    /** @var \stdClass */
-    private $rootResult;
+    /**
+     * @internal
+     * @var \stdClass
+     */
+    public $rootResult;
 
     /** @var int */
     private $pending;
@@ -279,7 +283,7 @@ class Executor implements Runtime
         $this->collector->initialize($documentNode, $operationName);
 
         if (!empty($this->errors)) {
-            return new ExecutionResult(self::resultToArray($this->rootResult), $this->errors);
+            return new ExecutionResult(null, $this->errors);
         }
 
         list($errors, $coercedVariableValues) = Values::getVariableValues(
@@ -289,7 +293,7 @@ class Executor implements Runtime
         );
 
         if (!empty($errors)) {
-            return new ExecutionResult(self::resultToArray($this->rootResult), $errors);
+            return new ExecutionResult(null, $errors);
         }
 
         $this->variableValues = $coercedVariableValues;
@@ -309,6 +313,11 @@ class Executor implements Runtime
                     $this->rootResult,
                     [$resultName]
                 );
+
+                $fieldDefinition = $execution->findFieldDefinition();
+                if ($fieldDefinition->getType() instanceof NonNull) {
+                    $execution->nullFence = [$resultName];
+                }
 
                 if ($this->collector->operation->operation === 'mutation' && !$this->queue->isEmpty()) {
                     $this->schedule->enqueue($execution);

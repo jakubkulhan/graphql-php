@@ -149,7 +149,7 @@ class QueryExecutionTest extends TestCase
 
         $this->config->setValidationRules($rules);
         $expected = [
-            'data' => []
+            'data' => new \stdClass()
         ];
         $this->assertQueryResultEquals($expected, $query);
         $this->assertTrue($called);
@@ -214,7 +214,7 @@ class QueryExecutionTest extends TestCase
     {
         $this->config->setValidationRules([]);
         $query = '{nonExistentField}';
-        $expected = ['data' => []];
+        $expected = ['data' => new \stdClass()];
         $this->assertQueryResultEquals($expected, $query);
     }
 
@@ -369,7 +369,7 @@ class QueryExecutionTest extends TestCase
 
         $result = $this->executePersistedQuery('some-id');
         $expected = [
-            'data' => []
+            'data' => new \stdClass()
         ];
         $this->assertEquals($expected, $result->toArray());
 
