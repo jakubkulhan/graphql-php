@@ -22,10 +22,10 @@ class ExecutionSharedState
     /** @var ValueNode[]|null */
     public $argumentValueMap;
 
-    /** @var \stdClass */
+    /** @var array */
     public $arguments;
 
-    /** @var \stdClass */
+    /** @var array */
     public $executions;
 
     public function __construct(array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap)
@@ -34,8 +34,8 @@ class ExecutionSharedState
         $this->fieldName = $fieldName;
         $this->resultName = $resultName;
         $this->argumentValueMap = $argumentValueMap;
-        $this->arguments = new \stdClass();
-        $this->executions = new \stdClass();
+        $this->arguments = [];
+        $this->executions = [];
     }
 
 }

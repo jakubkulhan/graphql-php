@@ -3,8 +3,10 @@ namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
 use GraphQL\Error\InvariantViolation;
+use GraphQL\Error\Warning;
 use GraphQL\Executor\Promise\Promise;
 use GraphQL\Language\AST\SelectionSetNode;
+use GraphQL\Type\Definition\AbstractType;
 use GraphQL\Type\Definition\CompositeType;
 use GraphQL\Type\Definition\FieldDefinition;
 use GraphQL\Type\Definition\InterfaceType;
@@ -71,8 +73,6 @@ class Execution
             return;
         }
 
-        $this->resolveInfo = null;
-
         try {
             if ($this->shared->fieldName === Introspection::SCHEMA_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
                 $this->fieldDefinition = Introspection::schemaMetaFieldDef();
@@ -91,10 +91,10 @@ class Execution
             }
 
             $cacheKey = spl_object_hash($this->fieldDefinition);
-            if (isset($this->shared->arguments->{$cacheKey})) {
-                $arguments = $this->shared->arguments->{$cacheKey};
+            if (isset($this->shared->arguments[$cacheKey])) {
+                $arguments = $this->shared->arguments[$cacheKey];
             } else {
-                $arguments = $this->shared->arguments->{$cacheKey} = Values::getArgumentValuesForMap(
+                $arguments = $this->shared->arguments[$cacheKey] = Values::getArgumentValuesForMap(
                     $this->fieldDefinition,
                     $this->shared->argumentValueMap,
                     $this->executor->variableValues
@@ -118,7 +118,7 @@ class Execution
 
             if ($this->executor->promiseAdapter->isThenable($resolvedValue)) {
                 $promise = $this->executor->promiseAdapter->convertThenable($resolvedValue);
-                if (!$promise instanceof Promise) {
+                if (!($promise instanceof Promise)) {
                     throw new InvariantViolation(sprintf(
                         '%s::convertThenable is expected to return instance of "%s", got: %s',
                         get_class($this->executor->promiseAdapter),
@@ -138,12 +138,12 @@ class Execution
         }
     }
 
-    public function handleValue($value)
+    public function handleValue($resolvedValue)
     {
         try {
-            $value = $this->finishValue($this->fieldDefinition->getType(), $value, $this->resolveInfo->path);
-            if ($value !== self::$undefined) {
-                $this->result->{$this->shared->resultName} = $value;
+            $resolvedValue = $this->finishValue($this->resolveInfo->returnType, $resolvedValue, $this->resolveInfo->path);
+            if ($resolvedValue !== self::$undefined) {
+                $this->result->{$this->shared->resultName} = $resolvedValue;
             }
 
         } catch (\Throwable $e) {
@@ -187,18 +187,6 @@ class Execution
         }
 
         if ($type instanceof NonNull) {
-            if ($value === null) {
-                $this->executor->addError(new Error(
-                    sprintf('Got null value for non-null field "%s".', $this->shared->fieldName),
-                    $this->shared->fieldNodes,
-                    null,
-                    null,
-                    $resultPath
-                ));
-
-                return self::$undefined;
-            }
-
             $value = $this->finishValue($type->getWrappedType(), $value, $resultPath);
 
             if ($value === null) {
@@ -242,10 +230,13 @@ class Execution
                     /** @var ObjectType|null $objectType */
                     $objectType = $type->resolveType($value, $this->executor->contextValue, $this->resolveInfo);
 
+                    if ($objectType === null) {
+                        $objectType = $this->resolveTypeSlow($value, $type);
+                    }
+
                     // FIXME: resolveType() may return promise
 
                     if ($objectType === null) {
-                        // FIXME: slow path using `ObjectType::isTypeOf()`, see OldExecutor::defaultTypeResolver()
                         $this->executor->addError(new Error(
                             sprintf(
                                 'Composite type "%s" did not resolve concrete object type for value: %s.',
@@ -259,6 +250,7 @@ class Execution
                         ));
                         return self::$undefined;
                     }
+
 
                 } else if ($type instanceof ObjectType) {
                     $objectType = $type;
@@ -296,20 +288,22 @@ class Execution
                 $result = new \stdClass();
 
                 $cacheKey = spl_object_hash($objectType);
-                if (isset($this->shared->executions->{$cacheKey})) {
-                    foreach ($this->shared->executions->{$cacheKey} as $execution) {
+                if (isset($this->shared->executions[$cacheKey])) {
+                    foreach ($this->shared->executions[$cacheKey] as $execution) {
                         /** @var Execution $execution */
                         $execution = clone $execution;
                         $execution->type = $objectType;
                         $execution->value = $value;
                         $execution->result = $result;
                         $execution->parentPath = $resultPath;
+                        $execution->fieldDefinition = null;
+                        $execution->resolveInfo = null;
 
                         $this->executor->enqueue($execution);
                     }
 
                 } else {
-                    $this->shared->executions->{$cacheKey} = [];
+                    $this->shared->executions[$cacheKey] = [];
 
                     $this->executor->collector->collectFields(
                         $objectType,
@@ -331,7 +325,7 @@ class Execution
                                 $resultPath
                             );
 
-                            $this->shared->executions->{$cacheKey}[] = $execution;
+                            $this->shared->executions[$cacheKey][] = $execution;
 
                             $this->executor->enqueue($execution);
                         }
@@ -371,6 +365,43 @@ class Execution
         return new SelectionSetNode([
             'selections' => $selections,
         ]);
+    }
+
+    private function resolveTypeSlow($value, AbstractType $abstractType)
+    {
+        if ($value !== null &&
+            is_array($value) &&
+            isset($value['__typename']) &&
+            is_string($value['__typename'])
+        ) {
+            return $this->executor->schema->getType($value['__typename']);
+        }
+
+        if ($abstractType instanceof InterfaceType && $this->executor->schema->getConfig()->typeLoader) {
+            Warning::warnOnce(
+                sprintf(
+                    'GraphQL Interface Type `%s` returned `null` from it`s `resolveType` function ' .
+                    'for value: %s. Switching to slow resolution method using `isTypeOf` ' .
+                    'of all possible implementations. It requires full schema scan and degrades query performance significantly. ' .
+                    ' Make sure your `resolveType` always returns valid implementation or throws.',
+                    $abstractType->name,
+                    Utils::printSafe($value)
+                ),
+                Warning::WARNING_FULL_SCHEMA_SCAN
+            );
+        }
+
+        $possibleTypes = $this->executor->schema->getPossibleTypes($abstractType);
+
+        foreach ($possibleTypes as $type) {
+            $typeCheck = $type->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
+            // FIXME: isTypeOf() may return promise
+            if ($typeCheck === true) {
+                return $type;
+            }
+        }
+
+        return null;
     }
 
 }

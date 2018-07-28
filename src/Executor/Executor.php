@@ -24,28 +24,49 @@ class Executor implements Runtime
     /** @var PromiseAdapter */
     private static $defaultPromiseAdapter;
 
-    /** @var Schema */
+    /**
+     * @internal
+     * @var Schema
+     */
     public $schema;
 
-    /** @var Collector */
+    /**
+     * @internal
+     * @var Collector
+     */
     public $collector;
 
-    /** @var callable */
+    /**
+     * @internal
+     * @var callable
+     */
     public $fieldResolver;
 
-    /** @var PromiseAdapter */
+    /**
+     * @internal
+     * @var PromiseAdapter
+     */
     public $promiseAdapter;
 
-    /** @var mixed|null */
+    /**
+     * @internal
+     * @var mixed|null
+     */
     public $rootValue;
 
-    /** @var mixed|null */
+    /**
+     * @internal
+     * @var mixed|null
+     */
     public $contextValue;
 
     /** @var mixed|null */
     private $rawVariableValues;
 
-    /** @var mixed|null */
+    /**
+     * @internal
+     * @var mixed|null
+     */
     public $variableValues;
 
     /** @var Error[] */
@@ -221,7 +242,7 @@ class Executor implements Runtime
 
     private static function resultToArray($value)
     {
-        if (is_object($value)) {
+        if ($value instanceof \stdClass) {
             $array = [];
             foreach ($value as $propertyName => $propertyValue) {
                 $array[$propertyName] = self::resultToArray($propertyValue);
