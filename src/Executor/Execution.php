@@ -72,6 +72,9 @@ class Execution
             return;
         }
 
+        // !!! assign null before resolve call to keep object keys sorted
+        $this->result->{$this->shared->resultName} = null;
+
         try {
             if ($this->shared->fieldName === Introspection::SCHEMA_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
                 $this->fieldDefinition = Introspection::schemaMetaFieldDef();
@@ -89,17 +92,6 @@ class Execution
                 $resolve = $this->executor->fieldResolver;
             }
 
-            $cacheKey = spl_object_hash($this->fieldDefinition);
-            if (isset($this->shared->arguments[$cacheKey])) {
-                $arguments = $this->shared->arguments[$cacheKey];
-            } else {
-                $arguments = $this->shared->arguments[$cacheKey] = Values::getArgumentValuesForMap(
-                    $this->fieldDefinition,
-                    $this->shared->argumentValueMap,
-                    $this->executor->variableValues
-                );
-            }
-
             $this->resolveInfo = new ResolveInfo(
                 $this->shared->fieldName,
                 $this->shared->fieldNodes,
@@ -113,7 +105,16 @@ class Execution
                 $this->executor->variableValues
             );
 
-            $this->result->{$this->shared->resultName} = null;
+            $cacheKey = spl_object_hash($this->fieldDefinition);
+            if (isset($this->shared->arguments[$cacheKey])) {
+                $arguments = $this->shared->arguments[$cacheKey];
+            } else {
+                $arguments = $this->shared->arguments[$cacheKey] = Values::getArgumentValuesForMap(
+                    $this->fieldDefinition,
+                    $this->shared->argumentValueMap,
+                    $this->executor->variableValues
+                );
+            }
 
             $value = yield $this->completeValue(
                 $this->resolveInfo->returnType,
@@ -134,71 +135,47 @@ class Execution
             $value = self::$undefined;
         }
 
-
         if ($value !== self::$undefined) {
             $this->result->{$this->shared->resultName} = $value;
 
-        } else if ($this->fieldDefinition !== null) { // !!! $this->fieldDefinition might not have been initialized
-            if ($this->fieldDefinition->getType() instanceof NonNull) {
-                // FIXME: null parent
-            } else {
-                $this->result->{$this->shared->resultName} = null;
-            }
+        } else if ($this->resolveInfo !== null && $this->resolveInfo->returnType instanceof NonNull) { // !!! $this->resolveInfo might not have been initialized
+            // FIXME: null parent
         }
     }
 
     private function completeValue(Type $type, $value, array $resultPath)
     {
+        $nonNull = false;
+        $returnValue = null;
+
+        if ($type instanceof NonNull) {
+            $nonNull = true;
+            $type = $type->getWrappedType();
+        }
+
+        // !!! $value might be promise, yield to resolve
         if ($this->executor->promiseAdapter->isThenable($value)) {
             $value = yield $value;
         }
 
-        if ($value instanceof \Throwable) {
+        if ($value === null) {
+            $returnValue = $value;
+            goto CHECKED_RETURN;
+        } else if ($value instanceof \Throwable) {
             throw $value;
         }
 
-        if ($type instanceof NonNull) {
-            try {
-                $value = yield $this->completeValue($type->getWrappedType(), $value, $resultPath);
-
-            } catch (\Throwable $reason) {
-                $this->executor->addError(Error::createLocatedError(
-                    $reason,
-                    $this->shared->fieldNodes,
-                    $this->resolveInfo->path
-                ));
-
-                return self::$undefined;
-            }
-
-            if ($value === null) {
-                $this->executor->addError(Error::createLocatedError(
-                    new InvariantViolation(sprintf(
-                        'Cannot return null for non-nullable field %s.%s.',
-                        $this->type->name,
-                        $this->shared->fieldName
-                    )),
-                    $this->shared->fieldNodes,
-                    $resultPath
-                ));
-
-                return self::$undefined;
-            }
-
-            return $value;
-
-        } else if ($type instanceof ListOfType) {
-            if ($value === null) {
-                return null;
-            }
-
-            $list = [];
+        if ($type instanceof ListOfType) {
+            $returnValue = [];
             $index = -1;
+            $itemType = $type->getWrappedType();
+            $itemPath = array_merge($resultPath, [null]);
+            $itemPathIndex = count($itemPath) - 1;
             foreach ($value as $item) {
                 ++$index;
-                $itemPath = array_merge($resultPath, [$index]);
+                $itemPath[$itemPathIndex] = $index; // !!! use arrays' COW instead of calling array_merge in the loop
                 try {
-                    $item = yield $this->completeValue($type->getWrappedType(), $item, $itemPath);
+                    $item = yield $this->completeValue($itemType, $item, $itemPath);
                 } catch (\Throwable $reason) {
                     $this->executor->addError(Error::createLocatedError(
                         $reason,
@@ -208,18 +185,15 @@ class Execution
                     $item = null;
                 }
                 if ($item === self::$undefined) {
-                    return self::$undefined;
+                    $returnValue = self::$undefined;
+                    goto CHECKED_RETURN;
                 }
-                $list[$index] = $item;
+                $returnValue[$index] = $item;
             }
 
-            return $list;
+            goto CHECKED_RETURN;
 
         } else {
-            if ($value === null) {
-                return null;
-            }
-
             if ($type !== $this->executor->schema->getType($type->name)) {
                 $hint = '';
                 if ($this->executor->schema->getConfig()->typeLoader) {
@@ -242,21 +216,27 @@ class Execution
                     $resultPath
                 ));
 
-                return null;
+                $returnValue = null;
+                goto CHECKED_RETURN;
             }
 
             if ($type instanceof LeafType) {
-                return $type->serialize($value);
+                $returnValue = $type->serialize($value);
+                goto CHECKED_RETURN;
 
             } else if ($type instanceof CompositeType) {
                 if ($type instanceof InterfaceType || $type instanceof UnionType) {
                     /** @var ObjectType|null $objectType */
-                    $objectType = yield $type->resolveType($value, $this->executor->contextValue, $this->resolveInfo);
+                    $objectType = $type->resolveType($value, $this->executor->contextValue, $this->resolveInfo);
 
-                    if ($objectType === null) {
+                    if ($objectType !== null) {
+                        // !!! $objectType->resolveType() might return promise, yield to resolve
+                        $objectType = yield $objectType;
+                        if (is_string($objectType)) {
+                            $objectType = $this->executor->schema->getType($objectType);
+                        }
+                    } else {
                         $objectType = yield $this->resolveTypeSlow($value, $type);
-                    } else if (is_string($objectType)) {
-                        $objectType = $this->executor->schema->getType($objectType);
                     }
 
                     if ($objectType === null) {
@@ -270,7 +250,8 @@ class Execution
                             $resultPath
                         ));
 
-                        return self::$undefined;
+                        $returnValue = self::$undefined;
+                        goto CHECKED_RETURN;
 
                     } else if (!($objectType instanceof ObjectType)) {
                         $this->executor->addError(Error::createLocatedError(
@@ -289,7 +270,8 @@ class Execution
                             $resultPath
                         ));
 
-                        return null;
+                        $returnValue = null;
+                        goto CHECKED_RETURN;
 
                     } else if (!$this->executor->schema->isPossibleType($type, $objectType)) {
                         $this->executor->addError(Error::createLocatedError(
@@ -302,7 +284,8 @@ class Execution
                             $resultPath
                         ));
 
-                        return null;
+                        $returnValue = null;
+                        goto CHECKED_RETURN;
 
                     } else if ($objectType !== $this->executor->schema->getType($objectType->name)) {
                         $this->executor->addError(Error::createLocatedError(
@@ -320,7 +303,8 @@ class Execution
                             $resultPath
                         ));
 
-                        return null;
+                        $returnValue = null;
+                        goto CHECKED_RETURN;
                     }
 
                 } else if ($type instanceof ObjectType) {
@@ -335,21 +319,28 @@ class Execution
                         $this->shared->fieldNodes,
                         $resultPath
                     ));
-                    return self::$undefined;
+
+                    $returnValue = self::$undefined;
+                    goto CHECKED_RETURN;
                 }
 
-                $typeCheck = yield $objectType->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
-                if ($typeCheck !== null && !$typeCheck) {
-                    $this->executor->addError(Error::createLocatedError(
-                        sprintf('Expected value of type "%s" but got: %s.', $type->name, Utils::printSafe($value)),
-                        $this->shared->fieldNodes,
-                        $resultPath
-                    ));
+                $typeCheck = $objectType->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
+                if ($typeCheck !== null) {
+                    // !!! $objectType->isTypeOf() might return promise, yield to resolve
+                    $typeCheck = yield $typeCheck;
+                    if (!$typeCheck) {
+                        $this->executor->addError(Error::createLocatedError(
+                            sprintf('Expected value of type "%s" but got: %s.', $type->name, Utils::printSafe($value)),
+                            $this->shared->fieldNodes,
+                            $resultPath
+                        ));
 
-                    return null;
+                        $returnValue = null;
+                        goto CHECKED_RETURN;
+                    }
                 }
 
-                $result = new \stdClass();
+                $returnValue = new \stdClass();
 
                 $cacheKey = spl_object_hash($objectType);
                 if (isset($this->shared->executions[$cacheKey])) {
@@ -358,7 +349,7 @@ class Execution
                         $execution = clone $execution;
                         $execution->type = $objectType;
                         $execution->value = $value;
-                        $execution->result = $result;
+                        $execution->result = $returnValue;
                         $execution->parentPath = $resultPath;
                         $execution->fieldDefinition = null;
                         $execution->resolveInfo = null;
@@ -375,7 +366,7 @@ class Execution
                         function (array $fieldNodes,
                                   string $fieldName,
                                   string $resultName,
-                                  ?array $argumentValueMap) use ($objectType, $value, $result, $resultPath, $cacheKey) {
+                                  ?array $argumentValueMap) use ($objectType, $value, $returnValue, $resultPath, $cacheKey) {
 
                             $execution = new Execution(
                                 $this->executor,
@@ -385,7 +376,7 @@ class Execution
                                 $argumentValueMap,
                                 $objectType,
                                 $value,
-                                $result,
+                                $returnValue,
                                 $resultPath
                             );
 
@@ -396,7 +387,7 @@ class Execution
                     );
                 }
 
-                return $result;
+                goto CHECKED_RETURN;
 
             } else {
                 $this->executor->addError(Error::createLocatedError(
@@ -405,9 +396,27 @@ class Execution
                     $resultPath
                 ));
 
-                return self::$undefined;
+                $returnValue = null;
+                goto CHECKED_RETURN;
             }
         }
+
+        CHECKED_RETURN:
+        if ($nonNull && $returnValue === null) {
+            $this->executor->addError(Error::createLocatedError(
+                new InvariantViolation(sprintf(
+                    'Cannot return null for non-nullable field %s.%s.',
+                    $this->type->name,
+                    $this->shared->fieldName
+                )),
+                $this->shared->fieldNodes,
+                $resultPath
+            ));
+
+            return self::$undefined;
+        }
+
+        return $returnValue;
     }
 
     private function mergeSelectionSets()

@@ -4,6 +4,9 @@ namespace GraphQL\Executor;
 use GraphQL\Language\AST\ValueNode;
 use GraphQL\Type\Definition\InputType;
 
+/**
+ * @internal
+ */
 interface Runtime
 {
 

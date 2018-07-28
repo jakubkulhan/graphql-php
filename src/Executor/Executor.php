@@ -413,6 +413,18 @@ class Executor implements Runtime
         }
     }
 
+    private function done()
+    {
+        --$this->pending;
+
+        $this->run();
+
+        if ($this->pending === 0) {
+            $doResolve = $this->doResolve;
+            $doResolve(new ExecutionResult(self::resultToArray($this->rootResult), $this->errors));
+        }
+    }
+
     /**
      * @internal
      */
@@ -427,21 +439,6 @@ class Executor implements Runtime
     public function addError($error)
     {
         $this->errors[] = $error;
-    }
-
-    /**
-     * @internal
-     */
-    public function done()
-    {
-        --$this->pending;
-
-        $this->run();
-
-        if ($this->pending === 0) {
-            $doResolve = $this->doResolve;
-            $doResolve(new ExecutionResult(self::resultToArray($this->rootResult), $this->errors));
-        }
     }
 
 }
