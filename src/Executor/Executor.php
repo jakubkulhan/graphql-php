@@ -312,7 +312,7 @@ class Executor implements Runtime
                 );
 
                 $fieldDefinition = $execution->findFieldDefinition();
-                if ($fieldDefinition->getType() instanceof NonNull) {
+                if (! $fieldDefinition->getType() instanceof NonNull) {
                     $execution->nullFence = [$resultName];
                 }
 
@@ -409,7 +409,7 @@ class Executor implements Runtime
             goto RESUME;
         }
 
-        if ($this->pending !== 0 || $this->schedule->isEmpty()) {
+        if ($this->pending > 0 || $this->schedule->isEmpty()) {
             return;
         }
 
@@ -425,7 +425,7 @@ class Executor implements Runtime
 
         $this->run();
 
-        if ($this->pending !== 0) {
+        if ($this->pending > 0) {
             return;
         }
 
