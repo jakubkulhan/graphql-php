@@ -125,9 +125,9 @@ class Collector
                 !($runtimeType === $this->schema->getQueryType() && ($fieldName === Introspection::SCHEMA_FIELD_NAME || $fieldName === Introspection::TYPE_FIELD_NAME)) &&
                 !$runtimeType->hasField($fieldName)
             ) {
-                $this->runtime->addError(new Error(
+                $this->runtime->addError(Error::createLocatedError(
                     sprintf('Object type "%s" does not have field "%s".', $runtimeType->name, $fieldName),
-                    $fieldNode
+                    [$fieldNode]
                 ));
                 continue;
             }

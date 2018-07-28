@@ -1,6 +1,9 @@
 <?php
 namespace GraphQL\Executor;
 
+/**
+ * @internal
+ */
 class ExecutionStrand
 {
 

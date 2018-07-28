@@ -2,6 +2,7 @@
 namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
+use GraphQL\Error\InvariantViolation;
 use GraphQL\Error\Warning;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Type\Definition\AbstractType;
@@ -112,14 +113,13 @@ class Execution
                 $this->executor->variableValues
             );
 
+            $this->result->{$this->shared->resultName} = null;
+
             $value = yield $this->completeValue(
                 $this->resolveInfo->returnType,
                 $resolve($this->value, $arguments, $this->executor->contextValue, $this->resolveInfo),
                 $this->resolveInfo->path
             );
-            if ($value !== self::$undefined) {
-                $this->result->{$this->shared->resultName} = $value;
-            }
 
         } catch (\Throwable $reason) {
             $this->executor->addError(new Error(
@@ -127,16 +127,22 @@ class Execution
                 $this->shared->fieldNodes,
                 null,
                 null,
-                array_merge($this->parentPath, [$this->shared->resultName]), // !!! $this->resolveInfo might be null
+                array_merge($this->parentPath, [$this->shared->resultName]), // !!! $this->resolveInfo might not have been initialized
                 $reason
             ));
 
-            if ($this->fieldDefinition !== null) {
-                if ($this->fieldDefinition->getType() instanceof NonNull) {
-                    // FIXME: null parent
-                } else {
-                    $this->result->{$this->shared->resultName} = null;
-                }
+            $value = self::$undefined;
+        }
+
+
+        if ($value !== self::$undefined) {
+            $this->result->{$this->shared->resultName} = $value;
+
+        } else if ($this->fieldDefinition !== null) { // !!! $this->fieldDefinition might not have been initialized
+            if ($this->fieldDefinition->getType() instanceof NonNull) {
+                // FIXME: null parent
+            } else {
+                $this->result->{$this->shared->resultName} = null;
             }
         }
     }
@@ -148,28 +154,31 @@ class Execution
         }
 
         if ($value instanceof \Throwable) {
-            $this->executor->addError(new Error(
-                $value->getMessage() ?: 'An unknown error occurred.',
-                $this->shared->fieldNodes,
-                null,
-                null,
-                $resultPath,
-                $value
-            ));
-
-            return null;
-
+            throw $value;
         }
 
         if ($type instanceof NonNull) {
-            $value = yield $this->completeValue($type->getWrappedType(), $value, $resultPath);
+            try {
+                $value = yield $this->completeValue($type->getWrappedType(), $value, $resultPath);
+
+            } catch (\Throwable $reason) {
+                $this->executor->addError(Error::createLocatedError(
+                    $reason,
+                    $this->shared->fieldNodes,
+                    $this->resolveInfo->path
+                ));
+
+                return self::$undefined;
+            }
 
             if ($value === null) {
-                $this->executor->addError(new Error(
-                    sprintf('Got null value for non-null field "%s".', $this->shared->fieldName),
+                $this->executor->addError(Error::createLocatedError(
+                    new InvariantViolation(sprintf(
+                        'Cannot return null for non-nullable field %s.%s.',
+                        $this->type->name,
+                        $this->shared->fieldName
+                    )),
                     $this->shared->fieldNodes,
-                    null,
-                    null,
                     $resultPath
                 ));
 
@@ -178,27 +187,66 @@ class Execution
 
             return $value;
 
+        } else if ($type instanceof ListOfType) {
+            if ($value === null) {
+                return null;
+            }
+
+            $list = [];
+            $index = -1;
+            foreach ($value as $item) {
+                ++$index;
+                $itemPath = array_merge($resultPath, [$index]);
+                try {
+                    $item = yield $this->completeValue($type->getWrappedType(), $item, $itemPath);
+                } catch (\Throwable $reason) {
+                    $this->executor->addError(Error::createLocatedError(
+                        $reason,
+                        $this->shared->fieldNodes,
+                        $itemPath
+                    ));
+                    $item = null;
+                }
+                if ($item === self::$undefined) {
+                    return self::$undefined;
+                }
+                $list[$index] = $item;
+            }
+
+            return $list;
+
         } else {
             if ($value === null) {
                 return null;
             }
 
+            if ($type !== $this->executor->schema->getType($type->name)) {
+                $hint = '';
+                if ($this->executor->schema->getConfig()->typeLoader) {
+                    $hint = sprintf(
+                        'Make sure that type loader returns the same instance as defined in %s.%s',
+                        $this->type,
+                        $this->shared->fieldName
+                    );
+                }
+                $this->executor->addError(Error::createLocatedError(
+                    new InvariantViolation(
+                        sprintf(
+                            'Schema must contain unique named types but contains multiple types named "%s". %s ' .
+                            '(see http://webonyx.github.io/graphql-php/type-system/#type-registry).',
+                            $type->name,
+                            $hint
+                        )
+                    ),
+                    $this->shared->fieldNodes,
+                    $resultPath
+                ));
+
+                return null;
+            }
+
             if ($type instanceof LeafType) {
                 return $type->serialize($value);
-
-            } else if ($type instanceof ListOfType) {
-                $list = [];
-                $index = -1;
-                foreach ($value as $item) {
-                    ++$index;
-                    $item = yield $this->completeValue($type->getWrappedType(), $item, array_merge($resultPath, [$index]));
-                    if ($item === self::$undefined) {
-                        return self::$undefined;
-                    }
-                    $list[$index] = $item;
-                }
-
-                return $list;
 
             } else if ($type instanceof CompositeType) {
                 if ($type instanceof InterfaceType || $type instanceof UnionType) {
@@ -207,36 +255,84 @@ class Execution
 
                     if ($objectType === null) {
                         $objectType = yield $this->resolveTypeSlow($value, $type);
+                    } else if (is_string($objectType)) {
+                        $objectType = $this->executor->schema->getType($objectType);
                     }
 
                     if ($objectType === null) {
-                        $this->executor->addError(new Error(
+                        $this->executor->addError(Error::createLocatedError(
                             sprintf(
                                 'Composite type "%s" did not resolve concrete object type for value: %s.',
                                 $type->name,
                                 Utils::printSafe($value)
                             ),
                             $this->shared->fieldNodes,
-                            null,
-                            null,
                             $resultPath
                         ));
-                        return self::$undefined;
-                    }
 
+                        return self::$undefined;
+
+                    } else if (!($objectType instanceof ObjectType)) {
+                        $this->executor->addError(Error::createLocatedError(
+                            new InvariantViolation(sprintf(
+                                'Abstract type %1$s must resolve to an Object type at ' .
+                                'runtime for field %s.%s with value "%s", received "%s".' .
+                                'Either the %1$s type should provide a "resolveType" ' .
+                                'function or each possible types should provide an "isTypeOf" function.',
+                                $type,
+                                $this->resolveInfo->parentType,
+                                $this->resolveInfo->fieldName,
+                                Utils::printSafe($value),
+                                Utils::printSafe($objectType)
+                            )),
+                            $this->shared->fieldNodes,
+                            $resultPath
+                        ));
+
+                        return null;
+
+                    } else if (!$this->executor->schema->isPossibleType($type, $objectType)) {
+                        $this->executor->addError(Error::createLocatedError(
+                            new InvariantViolation(sprintf(
+                                'Runtime Object type "%s" is not a possible type for "%s".',
+                                $objectType,
+                                $type
+                            )),
+                            $this->shared->fieldNodes,
+                            $resultPath
+                        ));
+
+                        return null;
+
+                    } else if ($objectType !== $this->executor->schema->getType($objectType->name)) {
+                        $this->executor->addError(Error::createLocatedError(
+                            new InvariantViolation(
+                                sprintf(
+                                    'Schema must contain unique named types but contains multiple types named "%s". ' .
+                                    'Make sure that `resolveType` function of abstract type "%s" returns the same ' .
+                                    'type instance as referenced anywhere else within the schema ' .
+                                    '(see http://webonyx.github.io/graphql-php/type-system/#type-registry).',
+                                    $objectType,
+                                    $type
+                                )
+                            ),
+                            $this->shared->fieldNodes,
+                            $resultPath
+                        ));
+
+                        return null;
+                    }
 
                 } else if ($type instanceof ObjectType) {
                     $objectType = $type;
 
                 } else {
-                    $this->executor->addError(new Error(
+                    $this->executor->addError(Error::createLocatedError(
                         sprintf(
                             'Unexpected field type "%s".',
                             Utils::printSafe($type)
                         ),
                         $this->shared->fieldNodes,
-                        null,
-                        null,
                         $resultPath
                     ));
                     return self::$undefined;
@@ -244,11 +340,9 @@ class Execution
 
                 $typeCheck = yield $objectType->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
                 if ($typeCheck !== null && !$typeCheck) {
-                    $this->executor->addError(new Error(
+                    $this->executor->addError(Error::createLocatedError(
                         sprintf('Expected value of type "%s" but got: %s.', $type->name, Utils::printSafe($value)),
                         $this->shared->fieldNodes,
-                        null,
-                        null,
                         $resultPath
                     ));
 
@@ -305,11 +399,9 @@ class Execution
                 return $result;
 
             } else {
-                $this->executor->addError(new Error(
-                    sprintf('Unhandled type "%s".', (string)$type),
+                $this->executor->addError(Error::createLocatedError(
+                    sprintf('Unhandled type "%s".', Utils::printSafe($type)),
                     $this->shared->fieldNodes,
-                    null,
-                    null,
                     $resultPath
                 ));
 
@@ -363,14 +455,18 @@ class Execution
 
         $possibleTypes = $this->executor->schema->getPossibleTypes($abstractType);
 
+        // to be backward-compatible with old executor, ->isTypeOf() must be called for all possible types
+        // and then return first matching type
+
+        $selectedType = null;
         foreach ($possibleTypes as $type) {
             $typeCheck = yield $type->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
-            if ($typeCheck === true) {
-                return $type;
+            if ($selectedType === null && $typeCheck === true) {
+                $selectedType = $type;
             }
         }
 
-        return null;
+        return $selectedType;
     }
 
 }

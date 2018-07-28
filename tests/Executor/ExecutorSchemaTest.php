@@ -3,9 +3,9 @@ namespace GraphQL\Tests\Executor;
 
 use GraphQL\Executor\Executor;
 use GraphQL\Language\Parser;
-use GraphQL\Type\Schema;
 use GraphQL\Type\Definition\ObjectType;
 use GraphQL\Type\Definition\Type;
+use GraphQL\Type\Schema;
 
 class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
 {
@@ -28,7 +28,7 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
 
         $BlogAuthor = new ObjectType([
             'name' => 'Author',
-            'fields' => function() use (&$BlogArticle, &$BlogImage) {
+            'fields' => function () use (&$BlogArticle, &$BlogImage) {
                 return [
                     'id' => ['type' => Type::string()],
                     'name' => ['type' => Type::string()],
@@ -124,6 +124,28 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
     ';
 
         $expected = [
+            'errors' => [
+                [
+                    'message' => 'Object type "Article" does not have field "hidden".',
+                    'category' => 'graphql',
+                    'locations' => [['line' => 30, 'column' => 9]]
+                ],
+                [
+                    'message' => 'Object type "Article" does not have field "notdefined".',
+                    'category' => 'graphql',
+                    'locations' => [['line' => 31, 'column' => 9]]
+                ],
+                [
+                    'message' => 'Object type "Article" does not have field "hidden".',
+                    'category' => 'graphql',
+                    'locations' => [['line' => 30, 'column' => 9]]
+                ],
+                [
+                    'message' => 'Object type "Article" does not have field "notdefined".',
+                    'category' => 'graphql',
+                    'locations' => [['line' => 31, 'column' => 9]]
+                ],
+            ],
             'data' => [
                 'feed' => [
                     ['id' => '1',
@@ -178,7 +200,7 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
     private function article($id)
     {
         $johnSmith = null;
-        $article = function($id) use (&$johnSmith) {
+        $article = function ($id) use (&$johnSmith) {
             return [
                 'id' => $id,
                 'isPublished' => 'true',
@@ -190,7 +212,7 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
             ];
         };
 
-        $getPic = function($uid, $width, $height) {
+        $getPic = function ($uid, $width, $height) {
             return [
                 'url' => "cdn://$uid",
                 'width' => $width,
@@ -201,10 +223,13 @@ class ExecutorSchemaTest extends \PHPUnit_Framework_TestCase
         $johnSmith = [
             'id' => 123,
             'name' => 'John Smith',
-            'pic' => function($width, $height) use ($getPic) {return $getPic(123, $width, $height);},
+            'pic' => function ($width, $height) use ($getPic) {
+                return $getPic(123, $width, $height);
+            },
             'recentArticle' => $article(1),
         ];
 
         return $article($id);
     }
+
 }

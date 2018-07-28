@@ -370,9 +370,9 @@ class Executor implements Runtime
                                     $this->queue->enqueue($strand);
                                     $this->done();
                                 },
-                                function ($error) use ($strand) {
+                                function (\Throwable $throwable) use ($strand) {
                                     $strand->success = false;
-                                    $strand->value = $error;
+                                    $strand->value = $throwable;
                                     $this->queue->enqueue($strand);
                                     $this->done();
                                 }
