@@ -263,7 +263,7 @@ class Collector
 
                     if ($conditionType instanceof ObjectType) {
                         if ($runtimeType->name !== $conditionType->name) {
-                            return;
+                            continue;
                         }
                     } else if ($conditionType instanceof AbstractType) {
                         if (!$this->schema->isPossibleType($conditionType, $runtimeType)) {

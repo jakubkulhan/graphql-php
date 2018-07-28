@@ -2,9 +2,7 @@
 namespace GraphQL\Executor;
 
 use GraphQL\Error\Error;
-use GraphQL\Error\InvariantViolation;
 use GraphQL\Error\Warning;
-use GraphQL\Executor\Promise\Promise;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Type\Definition\AbstractType;
 use GraphQL\Type\Definition\CompositeType;
@@ -114,59 +112,29 @@ class Execution
                 $this->executor->variableValues
             );
 
-            $resolvedValue = $resolve($this->value, $arguments, $this->executor->contextValue, $this->resolveInfo);
+            $resolvedValue = yield $resolve($this->value, $arguments, $this->executor->contextValue, $this->resolveInfo);
 
-            if ($this->executor->promiseAdapter->isThenable($resolvedValue)) {
-                $promise = $this->executor->promiseAdapter->convertThenable($resolvedValue);
-                if (!($promise instanceof Promise)) {
-                    throw new InvariantViolation(sprintf(
-                        '%s::convertThenable is expected to return instance of "%s", got: %s',
-                        get_class($this->executor->promiseAdapter),
-                        Promise::class,
-                        Utils::printSafe($promise)
-                    ));
+            $value = yield $this->finishValue($this->resolveInfo->returnType, $resolvedValue, $this->resolveInfo->path);
+            if ($value !== self::$undefined) {
+                $this->result->{$this->shared->resultName} = $value;
+            }
+
+        } catch (\Throwable $reason) {
+            $this->executor->addError(new Error(
+                $reason->getMessage() ?: 'An unknown error occurred.',
+                $this->shared->fieldNodes,
+                null,
+                null,
+                array_merge($this->parentPath, [$this->shared->resultName]), // !!! $this->resolveInfo might be null
+                $reason
+            ));
+
+            if ($this->fieldDefinition !== null) {
+                if ($this->fieldDefinition->getType() instanceof NonNull) {
+                    // FIXME: null parent
+                } else {
+                    $this->result->{$this->shared->resultName} = null;
                 }
-
-                $this->executor->waitFor($promise->then([$this, 'handleValue'], [$this, 'handleError']));
-
-            } else {
-                $this->handleValue($resolvedValue);
-            }
-
-        } catch (\Throwable $e) {
-            $this->handleError($e);
-        }
-    }
-
-    public function handleValue($resolvedValue)
-    {
-        try {
-            $resolvedValue = $this->finishValue($this->resolveInfo->returnType, $resolvedValue, $this->resolveInfo->path);
-            if ($resolvedValue !== self::$undefined) {
-                $this->result->{$this->shared->resultName} = $resolvedValue;
-            }
-
-        } catch (\Throwable $e) {
-            $this->handleError($e);
-        }
-    }
-
-    public function handleError(\Throwable $reason)
-    {
-        $this->executor->addError(new Error(
-            $reason->getMessage() ?: 'An unknown error occurred.',
-            $this->shared->fieldNodes,
-            null,
-            null,
-            array_merge($this->parentPath, [$this->shared->resultName]), // !!! $this->resolveInfo might be null
-            $reason
-        ));
-
-        if ($this->fieldDefinition !== null) {
-            if ($this->fieldDefinition->getType() instanceof NonNull) {
-                // FIXME: null parent
-            } else {
-                $this->result->{$this->shared->resultName} = null;
             }
         }
     }
@@ -184,10 +152,13 @@ class Execution
             ));
 
             return null;
+
+        } else if ($this->executor->promiseAdapter->isThenable($value)) {
+            $value = yield $value;
         }
 
         if ($type instanceof NonNull) {
-            $value = $this->finishValue($type->getWrappedType(), $value, $resultPath);
+            $value = yield $this->finishValue($type->getWrappedType(), $value, $resultPath);
 
             if ($value === null) {
                 $this->executor->addError(new Error(
@@ -216,7 +187,7 @@ class Execution
                 $index = -1;
                 foreach ($value as $item) {
                     ++$index;
-                    $item = $this->finishValue($type->getWrappedType(), $item, array_merge($resultPath, [$index]));
+                    $item = yield $this->finishValue($type->getWrappedType(), $item, array_merge($resultPath, [$index]));
                     if ($item === self::$undefined) {
                         return self::$undefined;
                     }
@@ -228,13 +199,11 @@ class Execution
             } else if ($type instanceof CompositeType) {
                 if ($type instanceof InterfaceType || $type instanceof UnionType) {
                     /** @var ObjectType|null $objectType */
-                    $objectType = $type->resolveType($value, $this->executor->contextValue, $this->resolveInfo);
+                    $objectType = yield $type->resolveType($value, $this->executor->contextValue, $this->resolveInfo);
 
                     if ($objectType === null) {
-                        $objectType = $this->resolveTypeSlow($value, $type);
+                        $objectType = yield $this->resolveTypeSlow($value, $type);
                     }
-
-                    // FIXME: resolveType() may return promise
 
                     if ($objectType === null) {
                         $this->executor->addError(new Error(
@@ -269,10 +238,7 @@ class Execution
                     return self::$undefined;
                 }
 
-                $typeCheck = $objectType->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
-
-                // FIXME: isTypeOf() may return promise
-
+                $typeCheck = yield $objectType->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
                 if ($typeCheck !== null && !$typeCheck) {
                     $this->executor->addError(new Error(
                         sprintf('Expected value of type "%s" but got: %s.', $type->name, Utils::printSafe($value)),
@@ -299,7 +265,7 @@ class Execution
                         $execution->fieldDefinition = null;
                         $execution->resolveInfo = null;
 
-                        $this->executor->enqueue($execution);
+                        $this->executor->pipeline->enqueue(new ExecutionStrand($this->executor, $execution->run()));
                     }
 
                 } else {
@@ -307,7 +273,7 @@ class Execution
 
                     $this->executor->collector->collectFields(
                         $objectType,
-                        $this->mergeSelectionSets(),
+                        $this->shared->mergedSelectionSet ?? $this->mergeSelectionSets(),
                         function (array $fieldNodes,
                                   string $fieldName,
                                   string $resultName,
@@ -327,7 +293,7 @@ class Execution
 
                             $this->shared->executions[$cacheKey][] = $execution;
 
-                            $this->executor->enqueue($execution);
+                            $this->executor->pipeline->enqueue(new ExecutionStrand($this->executor, $execution->run()));
                         }
                     );
                 }
@@ -362,7 +328,7 @@ class Execution
             }
         }
 
-        return new SelectionSetNode([
+        return $this->shared->mergedSelectionSet = new SelectionSetNode([
             'selections' => $selections,
         ]);
     }
@@ -394,8 +360,7 @@ class Execution
         $possibleTypes = $this->executor->schema->getPossibleTypes($abstractType);
 
         foreach ($possibleTypes as $type) {
-            $typeCheck = $type->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
-            // FIXME: isTypeOf() may return promise
+            $typeCheck = yield $type->isTypeOf($value, $this->executor->contextValue, $this->resolveInfo);
             if ($typeCheck === true) {
                 return $type;
             }

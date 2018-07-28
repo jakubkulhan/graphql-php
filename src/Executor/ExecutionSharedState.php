@@ -2,6 +2,7 @@
 namespace GraphQL\Executor;
 
 use GraphQL\Language\AST\FieldNode;
+use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Language\AST\ValueNode;
 
 /**
@@ -21,6 +22,9 @@ class ExecutionSharedState
 
     /** @var ValueNode[]|null */
     public $argumentValueMap;
+
+    /** @var SelectionSetNode|null */
+    public $mergedSelectionSet;
 
     /** @var array */
     public $arguments;

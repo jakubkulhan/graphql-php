@@ -72,7 +72,10 @@ class Executor implements Runtime
     /** @var Error[] */
     private $errors;
 
-    /** @var \SplQueue */
+    /**
+     * @internal
+     * @var \SplQueue
+     */
     public $pipeline;
 
     /** @var \SplQueue */
@@ -81,8 +84,11 @@ class Executor implements Runtime
     /** @var \stdClass */
     private $rootResult;
 
-    /** @var int */
-    private $pending;
+    /**
+     * @internal
+     * @var int
+     */
+    public $pending;
 
     /** @var callable */
     private $doResolve;
@@ -310,7 +316,7 @@ class Executor implements Runtime
                 if ($this->collector->operation->operation === 'mutation' && !$this->pipeline->isEmpty()) {
                     $this->schedule->enqueue($execution);
                 } else {
-                    $this->pipeline->enqueue($execution);
+                    $this->pipeline->enqueue(new ExecutionStrand($this, $execution->run()));
                 }
             }
         );
@@ -331,13 +337,15 @@ class Executor implements Runtime
     {
         START:
         while (!$this->pipeline->isEmpty()) {
-            /** @var Execution $execution */
-            $execution = $this->pipeline->dequeue();
-            $execution->run();
+            /** @var ExecutionStrand $strand */
+            $strand = $this->pipeline->dequeue();
+            $strand->run();
         }
 
         if ($this->pending === 0 && !$this->schedule->isEmpty()) {
-            $this->pipeline->enqueue($this->schedule->dequeue());
+            /** @var Execution $execution */
+            $execution = $this->schedule->dequeue();
+            $this->pipeline->enqueue(new ExecutionStrand($this, $execution->run()));
             goto START;
         }
     }
@@ -353,26 +361,9 @@ class Executor implements Runtime
     /**
      * @internal
      */
-    public function enqueue(Execution $execution)
-    {
-        $this->pipeline->enqueue($execution);
-    }
-
-    /**
-     * @internal
-     */
     public function addError($error)
     {
         $this->errors[] = $error;
-    }
-
-    /**
-     * @internal
-     */
-    public function waitFor(Promise $promise)
-    {
-        ++$this->pending;
-        $promise->then([$this, 'done'], [$this, 'done']);
     }
 
     /**
