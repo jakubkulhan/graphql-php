@@ -7,7 +7,6 @@ use GraphQL\Error\Warning;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Type\Definition\AbstractType;
 use GraphQL\Type\Definition\CompositeType;
-use GraphQL\Type\Definition\FieldDefinition;
 use GraphQL\Type\Definition\InterfaceType;
 use GraphQL\Type\Definition\LeafType;
 use GraphQL\Type\Definition\ListOfType;
@@ -43,15 +42,12 @@ class Execution
     private $result;
 
     /** @var array */
-    private $parentPath;
-
-    /** @var FieldDefinition|null */
-    private $fieldDefinition;
+    private $path;
 
     /** @var ResolveInfo|null */
     private $resolveInfo;
 
-    public function __construct(Executor $executor, array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap, ObjectType $type, $value, $result, $parentPath)
+    public function __construct(Executor $executor, array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap, ObjectType $type, $value, $result, $path)
     {
         if (!isset(self::$undefined)) {
             self::$undefined = Utils::undefined();
@@ -62,11 +58,12 @@ class Execution
         $this->type = $type;
         $this->value = $value;
         $this->result = $result;
-        $this->parentPath = $parentPath;
+        $this->path = $path;
     }
 
     public function run()
     {
+        // short-circuit evaluation for __typename
         if ($this->shared->fieldName === Introspection::TYPE_NAME_FIELD_NAME) {
             $this->result->{$this->shared->resultName} = $this->type->name;
             return;
@@ -76,60 +73,64 @@ class Execution
         $this->result->{$this->shared->resultName} = null;
 
         try {
-            if ($this->shared->fieldName === Introspection::SCHEMA_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
-                $this->fieldDefinition = Introspection::schemaMetaFieldDef();
-            } else if ($this->shared->fieldName === Introspection::TYPE_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
-                $this->fieldDefinition = Introspection::typeMetaFieldDef();
-            } else {
-                $this->fieldDefinition = $this->type->getField($this->shared->fieldName);
-            }
+            if ($this->shared->ifType === $this->type) {
+                $resolve = $this->shared->resolveIfType;
+                $returnType = $this->shared->returnTypeIfType;
+                $arguments = $this->shared->argumentsIfType;
+                $this->resolveInfo = clone $this->shared->resolveInfoIfType;
+                $this->resolveInfo->path = $this->path;
 
-            if ($this->fieldDefinition->resolveFn !== null) {
-                $resolve = $this->fieldDefinition->resolveFn;
-            } elseif ($this->type->resolveFieldFn !== null) {
-                $resolve = $this->type->resolveFieldFn;
             } else {
-                $resolve = $this->executor->fieldResolver;
-            }
+                $fieldDefinition = $this->findFieldDefinition();
 
-            $this->resolveInfo = new ResolveInfo(
-                $this->shared->fieldName,
-                $this->shared->fieldNodes,
-                $this->fieldDefinition->getType(),
-                $this->type,
-                array_merge($this->parentPath, [$this->shared->resultName]),
-                $this->executor->schema,
-                $this->executor->collector->fragments,
-                $this->executor->rootValue,
-                $this->executor->collector->operation,
-                $this->executor->variableValues
-            );
+                if ($fieldDefinition->resolveFn !== null) {
+                    $resolve = $fieldDefinition->resolveFn;
+                } elseif ($this->type->resolveFieldFn !== null) {
+                    $resolve = $this->type->resolveFieldFn;
+                } else {
+                    $resolve = $this->executor->fieldResolver;
+                }
 
-            $cacheKey = spl_object_hash($this->fieldDefinition);
-            if (isset($this->shared->arguments[$cacheKey])) {
-                $arguments = $this->shared->arguments[$cacheKey];
-            } else {
-                $arguments = $this->shared->arguments[$cacheKey] = Values::getArgumentValuesForMap(
-                    $this->fieldDefinition,
+                $returnType = $fieldDefinition->getType();
+
+                $this->resolveInfo = new ResolveInfo(
+                    $this->shared->fieldName,
+                    $this->shared->fieldNodes,
+                    $returnType,
+                    $this->type,
+                    $this->path,
+                    $this->executor->schema,
+                    $this->executor->collector->fragments,
+                    $this->executor->rootValue,
+                    $this->executor->collector->operation,
+                    $this->executor->variableValues
+                );
+
+                $arguments = Values::getArgumentValuesForMap(
+                    $fieldDefinition,
                     $this->shared->argumentValueMap,
                     $this->executor->variableValues
                 );
+
+                // !!! assign only in batch when no exception can be thrown in-between
+                $this->shared->ifType = $this->type;
+                $this->shared->returnTypeIfType = $returnType;
+                $this->shared->resolveIfType = $resolve;
+                $this->shared->argumentsIfType = $arguments;
+                $this->shared->resolveInfoIfType = $this->resolveInfo;
             }
 
             $value = yield $this->completeValue(
-                $this->resolveInfo->returnType,
+                $returnType,
                 $resolve($this->value, $arguments, $this->executor->contextValue, $this->resolveInfo),
-                $this->resolveInfo->path
+                $this->path
             );
 
         } catch (\Throwable $reason) {
-            $this->executor->addError(new Error(
-                $reason->getMessage() ?: 'An unknown error occurred.',
+            $this->executor->addError(Error::createLocatedError(
+                $reason,
                 $this->shared->fieldNodes,
-                null,
-                null,
-                array_merge($this->parentPath, [$this->shared->resultName]), // !!! $this->resolveInfo might not have been initialized
-                $reason
+                $this->path
             ));
 
             $value = self::$undefined;
@@ -138,12 +139,25 @@ class Execution
         if ($value !== self::$undefined) {
             $this->result->{$this->shared->resultName} = $value;
 
-        } else if ($this->resolveInfo !== null && $this->resolveInfo->returnType instanceof NonNull) { // !!! $this->resolveInfo might not have been initialized
+        } else if ($this->resolveInfo !== null && $this->resolveInfo->returnType instanceof NonNull) { // !!! $this->resolveInfo might not have been initialized yet
             // FIXME: null parent
         }
     }
 
-    private function completeValue(Type $type, $value, array $resultPath)
+    public function findFieldDefinition()
+    {
+        if ($this->shared->fieldName === Introspection::SCHEMA_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
+            return Introspection::schemaMetaFieldDef();
+        } else if ($this->shared->fieldName === Introspection::TYPE_FIELD_NAME && $this->type === $this->executor->schema->getQueryType()) {
+            return Introspection::typeMetaFieldDef();
+        } else if ($this->shared->fieldName === Introspection::TYPE_NAME_FIELD_NAME) {
+            return Introspection::typeNameMetaFieldDef();
+        } else {
+            return $this->type->getField($this->shared->fieldName);
+        }
+    }
+
+    private function completeValue(Type $type, $value, array $path)
     {
         $nonNull = false;
         $returnValue = null;
@@ -169,7 +183,7 @@ class Execution
             $returnValue = [];
             $index = -1;
             $itemType = $type->getWrappedType();
-            $itemPath = array_merge($resultPath, [null]);
+            $itemPath = array_merge($path, [null]);
             $itemPathIndex = count($itemPath) - 1;
             foreach ($value as $item) {
                 ++$index;
@@ -213,7 +227,7 @@ class Execution
                         )
                     ),
                     $this->shared->fieldNodes,
-                    $resultPath
+                    $path
                 ));
 
                 $returnValue = null;
@@ -247,7 +261,7 @@ class Execution
                                 Utils::printSafe($value)
                             ),
                             $this->shared->fieldNodes,
-                            $resultPath
+                            $path
                         ));
 
                         $returnValue = self::$undefined;
@@ -267,7 +281,7 @@ class Execution
                                 Utils::printSafe($objectType)
                             )),
                             $this->shared->fieldNodes,
-                            $resultPath
+                            $path
                         ));
 
                         $returnValue = null;
@@ -281,7 +295,7 @@ class Execution
                                 $type
                             )),
                             $this->shared->fieldNodes,
-                            $resultPath
+                            $path
                         ));
 
                         $returnValue = null;
@@ -300,7 +314,7 @@ class Execution
                                 )
                             ),
                             $this->shared->fieldNodes,
-                            $resultPath
+                            $path
                         ));
 
                         $returnValue = null;
@@ -317,7 +331,7 @@ class Execution
                             Utils::printSafe($type)
                         ),
                         $this->shared->fieldNodes,
-                        $resultPath
+                        $path
                     ));
 
                     $returnValue = self::$undefined;
@@ -332,7 +346,7 @@ class Execution
                         $this->executor->addError(Error::createLocatedError(
                             sprintf('Expected value of type "%s" but got: %s.', $type->name, Utils::printSafe($value)),
                             $this->shared->fieldNodes,
-                            $resultPath
+                            $path
                         ));
 
                         $returnValue = null;
@@ -350,8 +364,7 @@ class Execution
                         $execution->type = $objectType;
                         $execution->value = $value;
                         $execution->result = $returnValue;
-                        $execution->parentPath = $resultPath;
-                        $execution->fieldDefinition = null;
+                        $execution->path = array_merge($path, [$execution->shared->resultName]);
                         $execution->resolveInfo = null;
 
                         $this->executor->queue->enqueue(new ExecutionStrand($execution->run()));
@@ -366,7 +379,7 @@ class Execution
                         function (array $fieldNodes,
                                   string $fieldName,
                                   string $resultName,
-                                  ?array $argumentValueMap) use ($objectType, $value, $returnValue, $resultPath, $cacheKey) {
+                                  ?array $argumentValueMap) use ($objectType, $value, $returnValue, $path, $cacheKey) {
 
                             $execution = new Execution(
                                 $this->executor,
@@ -377,7 +390,7 @@ class Execution
                                 $objectType,
                                 $value,
                                 $returnValue,
-                                $resultPath
+                                array_merge($path, [$resultName])
                             );
 
                             $this->shared->executions[$cacheKey][] = $execution;
@@ -393,7 +406,7 @@ class Execution
                 $this->executor->addError(Error::createLocatedError(
                     sprintf('Unhandled type "%s".', Utils::printSafe($type)),
                     $this->shared->fieldNodes,
-                    $resultPath
+                    $path
                 ));
 
                 $returnValue = null;
@@ -410,7 +423,7 @@ class Execution
                     $this->shared->fieldName
                 )),
                 $this->shared->fieldNodes,
-                $resultPath
+                $path
             ));
 
             return self::$undefined;
@@ -464,8 +477,8 @@ class Execution
 
         $possibleTypes = $this->executor->schema->getPossibleTypes($abstractType);
 
-        // to be backward-compatible with old executor, ->isTypeOf() must be called for all possible types
-        // and then return first matching type
+        // to be backward-compatible with old executor, ->isTypeOf() is called for all possible types,
+        // it cannot short-circuit when the match is found
 
         $selectedType = null;
         foreach ($possibleTypes as $type) {

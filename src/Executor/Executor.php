@@ -307,7 +307,7 @@ class Executor implements Runtime
                     $this->collector->rootType,
                     $this->rootValue,
                     $this->rootResult,
-                    []
+                    [$resultName]
                 );
 
                 if ($this->collector->operation->operation === 'mutation' && !$this->queue->isEmpty()) {
@@ -353,16 +353,16 @@ class Executor implements Runtime
 
                 START:
                 if ($strand->current->valid()) {
-                    $produced = $strand->current->current();
+                    $value = $strand->current->current();
 
-                    if ($produced instanceof \Generator) {
+                    if ($value instanceof \Generator) {
                         $strand->stack[$strand->depth++] = $strand->current;
-                        $strand->current = $produced;
+                        $strand->current = $value;
                         goto START;
 
-                    } else if ($this->promiseAdapter->isThenable($produced)) {
+                    } else if ($this->promiseAdapter->isThenable($value)) {
                         $this->promiseAdapter
-                            ->convertThenable($produced)
+                            ->convertThenable($value)
                             ->then(
                                 function ($value) use ($strand) {
                                     $strand->success = true;
@@ -384,7 +384,7 @@ class Executor implements Runtime
 
                     } else {
                         $strand->success = true;
-                        $strand->value = $produced;
+                        $strand->value = $value;
                         goto RESUME;
                     }
                 }

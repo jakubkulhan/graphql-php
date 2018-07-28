@@ -4,6 +4,10 @@ namespace GraphQL\Executor;
 use GraphQL\Language\AST\FieldNode;
 use GraphQL\Language\AST\SelectionSetNode;
 use GraphQL\Language\AST\ValueNode;
+use GraphQL\Type\Definition\FieldDefinition;
+use GraphQL\Type\Definition\ObjectType;
+use GraphQL\Type\Definition\ResolveInfo;
+use GraphQL\Type\Definition\Type;
 
 /**
  * @internal
@@ -27,10 +31,22 @@ class ExecutionSharedState
     public $mergedSelectionSet;
 
     /** @var array */
-    public $arguments;
+    public $executions = [];
 
-    /** @var array */
-    public $executions;
+    /** @var ObjectType|null */
+    public $ifType;
+
+    /** @var Type|null */
+    public $returnTypeIfType;
+
+    /** @var callable|null */
+    public $resolveIfType;
+
+    /** @var mixed */
+    public $argumentsIfType;
+
+    /** @var ResolveInfo|null */
+    public $resolveInfoIfType;
 
     public function __construct(array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap)
     {
@@ -38,8 +54,6 @@ class ExecutionSharedState
         $this->fieldName = $fieldName;
         $this->resultName = $resultName;
         $this->argumentValueMap = $argumentValueMap;
-        $this->arguments = [];
-        $this->executions = [];
     }
 
 }

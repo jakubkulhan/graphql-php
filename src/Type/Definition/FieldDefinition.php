@@ -65,7 +65,7 @@ class FieldDefinition
     /**
      * @var OutputType
      */
-    private $type;
+    public $type;
 
     private static $def;
 
