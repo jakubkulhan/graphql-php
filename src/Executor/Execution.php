@@ -112,9 +112,11 @@ class Execution
                 $this->executor->variableValues
             );
 
-            $resolvedValue = yield $resolve($this->value, $arguments, $this->executor->contextValue, $this->resolveInfo);
-
-            $value = yield $this->finishValue($this->resolveInfo->returnType, $resolvedValue, $this->resolveInfo->path);
+            $value = yield $this->completeValue(
+                $this->resolveInfo->returnType,
+                $resolve($this->value, $arguments, $this->executor->contextValue, $this->resolveInfo),
+                $this->resolveInfo->path
+            );
             if ($value !== self::$undefined) {
                 $this->result->{$this->shared->resultName} = $value;
             }
@@ -139,8 +141,12 @@ class Execution
         }
     }
 
-    private function finishValue(Type $type, $value, array $resultPath)
+    private function completeValue(Type $type, $value, array $resultPath)
     {
+        if ($this->executor->promiseAdapter->isThenable($value)) {
+            $value = yield $value;
+        }
+
         if ($value instanceof \Throwable) {
             $this->executor->addError(new Error(
                 $value->getMessage() ?: 'An unknown error occurred.',
@@ -153,12 +159,10 @@ class Execution
 
             return null;
 
-        } else if ($this->executor->promiseAdapter->isThenable($value)) {
-            $value = yield $value;
         }
 
         if ($type instanceof NonNull) {
-            $value = yield $this->finishValue($type->getWrappedType(), $value, $resultPath);
+            $value = yield $this->completeValue($type->getWrappedType(), $value, $resultPath);
 
             if ($value === null) {
                 $this->executor->addError(new Error(
@@ -187,7 +191,7 @@ class Execution
                 $index = -1;
                 foreach ($value as $item) {
                     ++$index;
-                    $item = yield $this->finishValue($type->getWrappedType(), $item, array_merge($resultPath, [$index]));
+                    $item = yield $this->completeValue($type->getWrappedType(), $item, array_merge($resultPath, [$index]));
                     if ($item === self::$undefined) {
                         return self::$undefined;
                     }
@@ -265,7 +269,7 @@ class Execution
                         $execution->fieldDefinition = null;
                         $execution->resolveInfo = null;
 
-                        $this->executor->pipeline->enqueue(new ExecutionStrand($this->executor, $execution->run()));
+                        $this->executor->queue->enqueue(new ExecutionStrand($execution->run()));
                     }
 
                 } else {
@@ -293,7 +297,7 @@ class Execution
 
                             $this->shared->executions[$cacheKey][] = $execution;
 
-                            $this->executor->pipeline->enqueue(new ExecutionStrand($this->executor, $execution->run()));
+                            $this->executor->queue->enqueue(new ExecutionStrand($execution->run()));
                         }
                     );
                 }

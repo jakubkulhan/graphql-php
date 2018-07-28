@@ -76,7 +76,7 @@ class Executor implements Runtime
      * @internal
      * @var \SplQueue
      */
-    public $pipeline;
+    public $queue;
 
     /** @var \SplQueue */
     private $schedule;
@@ -84,11 +84,8 @@ class Executor implements Runtime
     /** @var \stdClass */
     private $rootResult;
 
-    /**
-     * @internal
-     * @var int
-     */
-    public $pending;
+    /** @var int */
+    private $pending;
 
     /** @var callable */
     private $doResolve;
@@ -274,7 +271,7 @@ class Executor implements Runtime
     {
         $this->rootResult = new \stdClass();
         $this->errors = [];
-        $this->pipeline = new \SplQueue();
+        $this->queue = new \SplQueue();
         $this->schedule = new \SplQueue();
         $this->pending = 0;
 
@@ -313,10 +310,10 @@ class Executor implements Runtime
                     []
                 );
 
-                if ($this->collector->operation->operation === 'mutation' && !$this->pipeline->isEmpty()) {
+                if ($this->collector->operation->operation === 'mutation' && !$this->queue->isEmpty()) {
                     $this->schedule->enqueue($execution);
                 } else {
-                    $this->pipeline->enqueue(new ExecutionStrand($this, $execution->run()));
+                    $this->queue->enqueue(new ExecutionStrand($execution->run()));
                 }
             }
         );
@@ -335,18 +332,84 @@ class Executor implements Runtime
 
     private function run()
     {
-        START:
-        while (!$this->pipeline->isEmpty()) {
+        RUN:
+        while (!$this->queue->isEmpty()) {
             /** @var ExecutionStrand $strand */
-            $strand = $this->pipeline->dequeue();
-            $strand->run();
+            $strand = $this->queue->dequeue();
+
+            try {
+                if ($strand->success !== null) {
+                    RESUME:
+
+                    if ($strand->success) {
+                        $strand->current->send($strand->value);
+                    } else {
+                        $strand->current->throw($strand->value);
+                    }
+
+                    $strand->success = null;
+                    $strand->value = null;
+                }
+
+                START:
+                if ($strand->current->valid()) {
+                    $produced = $strand->current->current();
+
+                    if ($produced instanceof \Generator) {
+                        $strand->stack[$strand->depth++] = $strand->current;
+                        $strand->current = $produced;
+                        goto START;
+
+                    } else if ($this->promiseAdapter->isThenable($produced)) {
+                        $this->promiseAdapter
+                            ->convertThenable($produced)
+                            ->then(
+                                function ($value) use ($strand) {
+                                    $strand->success = true;
+                                    $strand->value = $value;
+                                    $this->queue->enqueue($strand);
+                                    $this->done();
+                                },
+                                function ($error) use ($strand) {
+                                    $strand->success = false;
+                                    $strand->value = $error;
+                                    $this->queue->enqueue($strand);
+                                    $this->done();
+                                }
+                            );
+
+                        ++$this->pending;
+
+                        continue;
+
+                    } else {
+                        $strand->success = true;
+                        $strand->value = $produced;
+                        goto RESUME;
+                    }
+                }
+
+                $strand->success = true;
+                $strand->value = $strand->current->getReturn();
+
+            } catch (\Throwable $reason) {
+                $strand->success = false;
+                $strand->value = $reason;
+            }
+
+            if ($strand->depth > 0) {
+                $current = &$strand->stack[--$strand->depth];
+                $strand->current = $current;
+                $current = null;
+                goto RESUME;
+            }
         }
 
         if ($this->pending === 0 && !$this->schedule->isEmpty()) {
             /** @var Execution $execution */
             $execution = $this->schedule->dequeue();
-            $this->pipeline->enqueue(new ExecutionStrand($this, $execution->run()));
-            goto START;
+            $this->queue->enqueue(new ExecutionStrand($execution->run()));
+            goto RUN;
         }
     }
 
