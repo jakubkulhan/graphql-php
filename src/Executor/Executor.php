@@ -33,7 +33,6 @@ use function count;
 use function is_array;
 use function is_object;
 use function is_string;
-use function spl_object_hash;
 use function sprintf;
 
 /**
@@ -512,10 +511,8 @@ class Executor implements Runtime
 
             $value = $resolve($ctx->value, $arguments, $this->contextValue, $ctx->resolveInfo);
 
-            if ($this->completeValueFast($ctx, $returnType, $value, $ctx->path, $fastValue)) {
-                $value = $fastValue;
-            } else {
-                $value = yield $this->completeValue(
+            if (! $this->completeValueFast($ctx, $returnType, $value, $ctx->path, $returnValue)) {
+                $returnValue = yield $this->completeValue(
                     $ctx,
                     $returnType,
                     $value,
@@ -530,11 +527,11 @@ class Executor implements Runtime
                 $ctx->path
             ));
 
-            $value = self::$undefined;
+            $returnValue = self::$undefined;
         }
 
-        if ($value !== self::$undefined) {
-            $ctx->result->{$ctx->shared->resultName} = $value;
+        if ($returnValue !== self::$undefined) {
+            $ctx->result->{$ctx->shared->resultName} = $returnValue;
         } elseif ($ctx->resolveInfo !== null && $ctx->resolveInfo->returnType instanceof NonNull) { // !!! $ctx->resolveInfo might not have been initialized yet
             $result =& $this->rootResult;
             foreach ($ctx->nullFence ?? [] as $key) {
@@ -709,14 +706,12 @@ class Executor implements Runtime
             $itemType      = $type->getWrappedType();
             $itemPath      = array_merge($path, [null]);
             $itemPathIndex = count($itemPath) - 1;
-            foreach ($value as $item) {
+            foreach ($value as $itemValue) {
                 ++$index;
                 $itemPath[$itemPathIndex] = $index; // !!! use arrays' COW instead of calling array_merge in the loop
                 try {
-                    if ($this->completeValueFast($ctx, $itemType, $item, $itemPath, $fastValue)) {
-                        $item = $fastValue;
-                    } else {
-                        $item = yield $this->completeValue($ctx, $itemType, $item, $itemPath, $nullFence);
+                    if (! $this->completeValueFast($ctx, $itemType, $itemValue, $itemPath, $itemReturnValue)) {
+                        $itemReturnValue = yield $this->completeValue($ctx, $itemType, $itemValue, $itemPath, $nullFence);
                     }
                 } catch (\Throwable $reason) {
                     $this->addError(Error::createLocatedError(
@@ -724,13 +719,13 @@ class Executor implements Runtime
                         $ctx->shared->fieldNodes,
                         $itemPath
                     ));
-                    $item = null;
+                    $itemReturnValue = null;
                 }
-                if ($item === self::$undefined) {
+                if ($itemReturnValue === self::$undefined) {
                     $returnValue = self::$undefined;
                     goto CHECKED_RETURN;
                 }
-                $returnValue[$index] = $item;
+                $returnValue[$index] = $itemReturnValue;
             }
 
             goto CHECKED_RETURN;
