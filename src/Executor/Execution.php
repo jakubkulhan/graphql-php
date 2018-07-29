@@ -351,7 +351,7 @@ class Execution
 
                         $returnValue = self::$undefined;
                         goto CHECKED_RETURN;
-                    } elseif (! ($objectType instanceof ObjectType)) {
+                    } elseif (! $objectType instanceof ObjectType) {
                         $this->executor->addError(Error::createLocatedError(
                             new InvariantViolation(sprintf(
                                 'Abstract type %1$s must resolve to an Object type at ' .

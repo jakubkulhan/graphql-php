@@ -98,8 +98,14 @@ class Executor implements Runtime
     /** @var callable */
     private $doResolve;
 
-    public function __construct(Schema $schema, callable $fieldResolver, PromiseAdapter $promiseAdapter, $rootValue, $contextValue, $rawVariableValues)
-    {
+    public function __construct(
+        Schema $schema,
+        callable $fieldResolver,
+        PromiseAdapter $promiseAdapter,
+        $rootValue,
+        $contextValue,
+        $rawVariableValues
+    ) {
         $this->schema            = $schema;
         $this->fieldResolver     = $fieldResolver;
         $this->promiseAdapter    = $promiseAdapter;
@@ -365,6 +371,9 @@ class Executor implements Runtime
                         $strand->current                 = $value;
                         goto START;
                     } elseif ($this->promiseAdapter->isThenable($value)) {
+                        // !!! increment pending before calling ->then() as it may invoke the callback right away
+                        ++$this->pending;
+
                         $this->promiseAdapter
                             ->convertThenable($value)
                             ->then(
@@ -381,9 +390,6 @@ class Executor implements Runtime
                                     $this->done();
                                 }
                             );
-
-                        ++$this->pending;
-
                         continue;
                     } else {
                         $strand->success = true;
