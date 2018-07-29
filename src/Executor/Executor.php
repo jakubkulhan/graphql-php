@@ -464,11 +464,11 @@ class Executor implements Runtime
         $ctx->result->{$ctx->shared->resultName} = null;
 
         try {
-            if ($ctx->shared->ifType === $ctx->type) {
-                $resolve                = $ctx->shared->resolveIfType;
-                $returnType             = $ctx->shared->returnTypeIfType;
-                $arguments              = $ctx->shared->argumentsIfType;
-                $ctx->resolveInfo       = clone $ctx->shared->resolveInfoIfType;
+            if ($ctx->shared->typeGuard1 === $ctx->type) {
+                $resolve                = $ctx->shared->resolveIfType1;
+                $returnType             = $ctx->shared->returnTypeIfType1;
+                $arguments              = $ctx->shared->argumentsIfType1;
+                $ctx->resolveInfo       = clone $ctx->shared->resolveInfoIfType1;
                 $ctx->resolveInfo->path = $ctx->path;
             } else {
                 $fieldDefinition = $this->findFieldDefinition($ctx);
@@ -503,11 +503,11 @@ class Executor implements Runtime
                 );
 
                 // !!! assign only in batch when no exception can be thrown in-between
-                $ctx->shared->ifType            = $ctx->type;
-                $ctx->shared->returnTypeIfType  = $returnType;
-                $ctx->shared->resolveIfType     = $resolve;
-                $ctx->shared->argumentsIfType   = $arguments;
-                $ctx->shared->resolveInfoIfType = $ctx->resolveInfo;
+                $ctx->shared->typeGuard1         = $ctx->type;
+                $ctx->shared->returnTypeIfType1  = $returnType;
+                $ctx->shared->resolveIfType1     = $resolve;
+                $ctx->shared->argumentsIfType1   = $arguments;
+                $ctx->shared->resolveInfoIfType1 = $ctx->resolveInfo;
             }
 
             $value = $resolve($ctx->value, $arguments, $this->contextValue, $ctx->resolveInfo);
@@ -890,9 +890,8 @@ class Executor implements Runtime
 
                 $returnValue = new \stdClass();
 
-                $cacheKey = spl_object_hash($objectType);
-                if (isset($ctx->shared->childContexts[$cacheKey])) {
-                    foreach ($ctx->shared->childContexts[$cacheKey] as $childCtx) {
+                if ($ctx->shared->typeGuard2 === $objectType) {
+                    foreach ($ctx->shared->childContextIfType2 as $childCtx) {
                         /** @var ExecutionContext $childCtx */
                         $childCtx              = clone $childCtx;
                         $childCtx->type        = $objectType;
@@ -905,7 +904,8 @@ class Executor implements Runtime
                         $this->queue->enqueue(new ExecutionStrand($this->spawn($childCtx)));
                     }
                 } else {
-                    $ctx->shared->childContexts[$cacheKey] = [];
+                    $ctx->shared->typeGuard2          = $objectType;
+                    $ctx->shared->childContextIfType2 = [];
 
                     $this->collector->collectFields(
                         $objectType,
@@ -921,7 +921,6 @@ class Executor implements Runtime
                             $value,
                             $returnValue,
                             $path,
-                            $cacheKey,
                             $nullFence
                         ) {
                             $childCtx = new ExecutionContext(
@@ -936,7 +935,7 @@ class Executor implements Runtime
                                 $nullFence
                             );
 
-                            $ctx->shared->childContexts[$cacheKey][] = $childCtx;
+                            $ctx->shared->childContextIfType2[] = $childCtx;
 
                             $this->queue->enqueue(new ExecutionStrand($this->spawn($childCtx)));
                         }

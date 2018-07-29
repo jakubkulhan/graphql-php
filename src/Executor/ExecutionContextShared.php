@@ -31,23 +31,26 @@ class ExecutionContextShared
     /** @var SelectionSetNode|null */
     public $mergedSelectionSet;
 
-    /** @var ExecutionContext[][] */
-    public $childContexts = [];
-
     /** @var ObjectType|null */
-    public $ifType;
+    public $typeGuard1;
 
     /** @var Type|null */
-    public $returnTypeIfType;
+    public $returnTypeIfType1;
 
     /** @var callable|null */
-    public $resolveIfType;
+    public $resolveIfType1;
 
     /** @var mixed */
-    public $argumentsIfType;
+    public $argumentsIfType1;
 
     /** @var ResolveInfo|null */
-    public $resolveInfoIfType;
+    public $resolveInfoIfType1;
+
+    /** @var ObjectType|null */
+    public $typeGuard2;
+
+    /** @var ExecutionContext[]|null */
+    public $childContextIfType2 = [];
 
     /**
      * @param FieldNode[]  $fieldNodes
