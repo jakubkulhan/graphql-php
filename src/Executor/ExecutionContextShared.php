@@ -14,7 +14,7 @@ use GraphQL\Type\Definition\Type;
 /**
  * @internal
  */
-class ExecutionSharedState
+class ExecutionContextShared
 {
     /** @var FieldNode[] */
     public $fieldNodes;
@@ -31,8 +31,8 @@ class ExecutionSharedState
     /** @var SelectionSetNode|null */
     public $mergedSelectionSet;
 
-    /** @var Execution[][] */
-    public $executions = [];
+    /** @var ExecutionContext[][] */
+    public $childContexts = [];
 
     /** @var ObjectType|null */
     public $ifType;
