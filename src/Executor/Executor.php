@@ -510,13 +510,19 @@ class Executor implements Runtime
                 $ctx->shared->resolveInfoIfType = $ctx->resolveInfo;
             }
 
-            $value = yield $this->completeValue(
-                $ctx,
-                $returnType,
-                $resolve($ctx->value, $arguments, $this->contextValue, $ctx->resolveInfo),
-                $ctx->path,
-                $ctx->nullFence
-            );
+            $value = $resolve($ctx->value, $arguments, $this->contextValue, $ctx->resolveInfo);
+
+            if ($this->completeValueFast($ctx, $returnType, $value, $ctx->path, $fastValue)) {
+                $value = $fastValue;
+            } else {
+                $value = yield $this->completeValue(
+                    $ctx,
+                    $returnType,
+                    $value,
+                    $ctx->path,
+                    $ctx->nullFence
+                );
+            }
         } catch (\Throwable $reason) {
             $this->addError(Error::createLocatedError(
                 $reason,
@@ -560,6 +566,89 @@ class Executor implements Runtime
     }
 
     /**
+     * @param mixed    $value
+     * @param string[] $path
+     * @param mixed    $returnValue
+     */
+    private function completeValueFast(ExecutionContext $ctx, Type $type, $value, array $path, &$returnValue) : bool
+    {
+        // special handling of Throwable inherited from JS reference implementation, but makes no sense in this PHP
+        if ($this->promiseAdapter->isThenable($value) || $value instanceof \Throwable) {
+            return false;
+        }
+
+        $nonNull = false;
+        if ($type instanceof NonNull) {
+            $nonNull = true;
+            $type    = $type->getWrappedType();
+        }
+
+        if (! $type instanceof LeafType) {
+            return false;
+        }
+
+        if ($type !== $this->schema->getType($type->name)) {
+            $hint = '';
+            if ($this->schema->getConfig()->typeLoader) {
+                $hint = sprintf(
+                    'Make sure that type loader returns the same instance as defined in %s.%s',
+                    $ctx->type,
+                    $ctx->shared->fieldName
+                );
+            }
+            $this->addError(Error::createLocatedError(
+                new InvariantViolation(
+                    sprintf(
+                        'Schema must contain unique named types but contains multiple types named "%s". %s ' .
+                        '(see http://webonyx.github.io/graphql-php/type-system/#type-registry).',
+                        $type->name,
+                        $hint
+                    )
+                ),
+                $ctx->shared->fieldNodes,
+                $path
+            ));
+
+            $value = null;
+        }
+
+        if ($value === null) {
+            $returnValue = null;
+        } else {
+            try {
+                $returnValue = $type->serialize($value);
+            } catch (\Throwable $error) {
+                $this->addError(Error::createLocatedError(
+                    new InvariantViolation(
+                        'Expected a value of type "' . Utils::printSafe($type) . '" but received: ' . Utils::printSafe($value),
+                        0,
+                        $error
+                    ),
+                    $ctx->shared->fieldNodes,
+                    $path
+                ));
+                $returnValue = null;
+            }
+        }
+
+        if ($nonNull && $returnValue === null) {
+            $this->addError(Error::createLocatedError(
+                new InvariantViolation(sprintf(
+                    'Cannot return null for non-nullable field %s.%s.',
+                    $ctx->type->name,
+                    $ctx->shared->fieldName
+                )),
+                $ctx->shared->fieldNodes,
+                $path
+            ));
+
+            $returnValue = self::$undefined;
+        }
+
+        return true;
+    }
+
+    /**
      * @param mixed         $value
      * @param string[]      $path
      * @param string[]|null $nullFence
@@ -600,6 +689,7 @@ class Executor implements Runtime
             $returnValue = $value;
             goto CHECKED_RETURN;
         } elseif ($value instanceof \Throwable) {
+            // special handling of Throwable inherited from JS reference implementation, but makes no sense in this PHP
             $this->addError(Error::createLocatedError(
                 $value,
                 $ctx->shared->fieldNodes,
@@ -623,7 +713,11 @@ class Executor implements Runtime
                 ++$index;
                 $itemPath[$itemPathIndex] = $index; // !!! use arrays' COW instead of calling array_merge in the loop
                 try {
-                    $item = yield $this->completeValue($ctx, $itemType, $item, $itemPath, $nullFence);
+                    if ($this->completeValueFast($ctx, $itemType, $item, $itemPath, $fastValue)) {
+                        $item = $fastValue;
+                    } else {
+                        $item = yield $this->completeValue($ctx, $itemType, $item, $itemPath, $nullFence);
+                    }
                 } catch (\Throwable $reason) {
                     $this->addError(Error::createLocatedError(
                         $reason,
