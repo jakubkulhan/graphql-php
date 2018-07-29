@@ -590,8 +590,7 @@ class Executor implements Runtime
      */
     private function completeValueFast(ExecutionContext $ctx, Type $type, $value, array $path, &$returnValue) : bool
     {
-        // special handling of Throwable inherited from JS reference implementation, but makes no sense in this PHP
-        if ($this->promiseAdapter->isThenable($value) || $value instanceof \Throwable) {
+        if ($this->promiseAdapter->isThenable($value)) {
             return false;
         }
 
@@ -603,31 +602,6 @@ class Executor implements Runtime
 
         if (! $type instanceof LeafType) {
             return false;
-        }
-
-        if ($type !== $this->schema->getType($type->name)) {
-            $hint = '';
-            if ($this->schema->getConfig()->typeLoader) {
-                $hint = sprintf(
-                    'Make sure that type loader returns the same instance as defined in %s.%s',
-                    $ctx->type,
-                    $ctx->shared->fieldName
-                );
-            }
-            $this->addError(Error::createLocatedError(
-                new InvariantViolation(
-                    sprintf(
-                        'Schema must contain unique named types but contains multiple types named "%s". %s ' .
-                        '(see http://webonyx.github.io/graphql-php/type-system/#type-registry).',
-                        $type->name,
-                        $hint
-                    )
-                ),
-                $ctx->shared->fieldNodes,
-                $path
-            ));
-
-            $value = null;
         }
 
         if ($value === null) {
@@ -706,19 +680,6 @@ class Executor implements Runtime
         if ($value === null) {
             $returnValue = $value;
             goto CHECKED_RETURN;
-        } elseif ($value instanceof \Throwable) {
-            // special handling of Throwable inherited from JS reference implementation, but makes no sense in this PHP
-            $this->addError(Error::createLocatedError(
-                $value,
-                $ctx->shared->fieldNodes,
-                $path
-            ));
-            if ($nonNull) {
-                $returnValue = self::$undefined;
-            } else {
-                $returnValue = null;
-            }
-            goto CHECKED_RETURN;
         }
 
         if ($type instanceof ListOfType) {
@@ -751,32 +712,6 @@ class Executor implements Runtime
 
             goto CHECKED_RETURN;
         } else {
-            if ($type !== $this->schema->getType($type->name)) {
-                $hint = '';
-                if ($this->schema->getConfig()->typeLoader) {
-                    $hint = sprintf(
-                        'Make sure that type loader returns the same instance as defined in %s.%s',
-                        $ctx->type,
-                        $ctx->shared->fieldName
-                    );
-                }
-                $this->addError(Error::createLocatedError(
-                    new InvariantViolation(
-                        sprintf(
-                            'Schema must contain unique named types but contains multiple types named "%s". %s ' .
-                            '(see http://webonyx.github.io/graphql-php/type-system/#type-registry).',
-                            $type->name,
-                            $hint
-                        )
-                    ),
-                    $ctx->shared->fieldNodes,
-                    $path
-                ));
-
-                $returnValue = null;
-                goto CHECKED_RETURN;
-            }
-
             if ($type instanceof LeafType) {
                 try {
                     $returnValue = $type->serialize($value);
@@ -821,56 +756,6 @@ class Executor implements Runtime
 
                         $returnValue = self::$undefined;
                         goto CHECKED_RETURN;
-                    } elseif (! $objectType instanceof ObjectType) {
-                        $this->addError(Error::createLocatedError(
-                            new InvariantViolation(sprintf(
-                                'Abstract type %1$s must resolve to an Object type at ' .
-                                'runtime for field %s.%s with value "%s", received "%s".' .
-                                'Either the %1$s type should provide a "resolveType" ' .
-                                'function or each possible types should provide an "isTypeOf" function.',
-                                $type,
-                                $ctx->resolveInfo->parentType,
-                                $ctx->resolveInfo->fieldName,
-                                Utils::printSafe($value),
-                                Utils::printSafe($objectType)
-                            )),
-                            $ctx->shared->fieldNodes,
-                            $path
-                        ));
-
-                        $returnValue = null;
-                        goto CHECKED_RETURN;
-                    } elseif (! $this->schema->isPossibleType($type, $objectType)) {
-                        $this->addError(Error::createLocatedError(
-                            new InvariantViolation(sprintf(
-                                'Runtime Object type "%s" is not a possible type for "%s".',
-                                $objectType,
-                                $type
-                            )),
-                            $ctx->shared->fieldNodes,
-                            $path
-                        ));
-
-                        $returnValue = null;
-                        goto CHECKED_RETURN;
-                    } elseif ($objectType !== $this->schema->getType($objectType->name)) {
-                        $this->addError(Error::createLocatedError(
-                            new InvariantViolation(
-                                sprintf(
-                                    'Schema must contain unique named types but contains multiple types named "%s". ' .
-                                    'Make sure that `resolveType` function of abstract type "%s" returns the same ' .
-                                    'type instance as referenced anywhere else within the schema ' .
-                                    '(see http://webonyx.github.io/graphql-php/type-system/#type-registry).',
-                                    $objectType,
-                                    $type
-                                )
-                            ),
-                            $ctx->shared->fieldNodes,
-                            $path
-                        ));
-
-                        $returnValue = null;
-                        goto CHECKED_RETURN;
                     }
                 } elseif ($type instanceof ObjectType) {
                     $objectType = $type;
@@ -886,22 +771,6 @@ class Executor implements Runtime
 
                     $returnValue = self::$undefined;
                     goto CHECKED_RETURN;
-                }
-
-                $typeCheck = $objectType->isTypeOf($value, $this->contextValue, $ctx->resolveInfo);
-                if ($typeCheck !== null) {
-                    // !!! $objectType->isTypeOf() might return promise, yield to resolve
-                    $typeCheck = yield $typeCheck;
-                    if (! $typeCheck) {
-                        $this->addError(Error::createLocatedError(
-                            sprintf('Expected value of type "%s" but got: %s.', $type->name, Utils::printSafe($value)),
-                            $ctx->shared->fieldNodes,
-                            $path
-                        ));
-
-                        $returnValue = null;
-                        goto CHECKED_RETURN;
-                    }
                 }
 
                 $returnValue = new \stdClass();
