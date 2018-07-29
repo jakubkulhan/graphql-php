@@ -302,6 +302,9 @@ class Executor implements Runtime
             $this->collector->rootType,
             $this->collector->operation->selectionSet,
             function (array $fieldNodes, string $fieldName, string $resultName, ?array $argumentValueMap) {
+                // !!! assign to keep object keys sorted
+                $this->rootResult->{$resultName} = null;
+
                 $ctx = new ExecutionContext(
                     $fieldNodes,
                     $fieldName,
@@ -458,9 +461,6 @@ class Executor implements Runtime
             $ctx->result->{$ctx->shared->resultName} = $ctx->type->name;
             return;
         }
-
-        // !!! assign null before resolve call to keep object keys sorted
-        $ctx->result->{$ctx->shared->resultName} = null;
 
         try {
             if ($ctx->shared->typeGuard1 === $ctx->type) {
@@ -887,7 +887,6 @@ class Executor implements Runtime
 
                 if ($ctx->shared->typeGuard2 === $objectType) {
                     foreach ($ctx->shared->childContextIfType2 as $childCtx) {
-                        /** @var ExecutionContext $childCtx */
                         $childCtx              = clone $childCtx;
                         $childCtx->type        = $objectType;
                         $childCtx->value       = $value;
@@ -897,6 +896,9 @@ class Executor implements Runtime
                         $childCtx->resolveInfo = null;
 
                         $this->queue->enqueue(new ExecutionStrand($this->spawn($childCtx)));
+
+                        // !!! assign null to keep object keys sorted
+                        $returnValue->{$childCtx->shared->resultName} = null;
                     }
                 } else {
                     $ctx->shared->typeGuard2          = $objectType;
@@ -933,6 +935,9 @@ class Executor implements Runtime
                             $ctx->shared->childContextIfType2[] = $childCtx;
 
                             $this->queue->enqueue(new ExecutionStrand($this->spawn($childCtx)));
+
+                            // !!! assign null to keep object keys sorted
+                            $returnValue->{$resultName} = null;
                         }
                     );
                 }

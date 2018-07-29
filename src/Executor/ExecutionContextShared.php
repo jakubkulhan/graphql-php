@@ -50,7 +50,7 @@ class ExecutionContextShared
     public $typeGuard2;
 
     /** @var ExecutionContext[]|null */
-    public $childContextIfType2 = [];
+    public $childContextIfType2;
 
     /**
      * @param FieldNode[]  $fieldNodes
