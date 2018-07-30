@@ -52,9 +52,6 @@ class Executor implements Runtime
     /** @var Schema */
     private $schema;
 
-    /** @var Collector */
-    private $collector;
-
     /** @var callable */
     private $fieldResolver;
 
@@ -72,6 +69,9 @@ class Executor implements Runtime
 
     /** @var mixed|null */
     private $variableValues;
+
+    /** @var Collector */
+    private $collector;
 
     /** @var Error[] */
     private $errors;
@@ -283,7 +283,7 @@ class Executor implements Runtime
         $this->collector->initialize($documentNode, $operationName);
 
         if (! empty($this->errors)) {
-            return new ExecutionResult(null, $this->errors);
+            return $this->finishExecute(null, $this->errors);
         }
 
         list($errors, $coercedVariableValues) = Values::getVariableValues(
@@ -293,7 +293,7 @@ class Executor implements Runtime
         );
 
         if (! empty($errors)) {
-            return new ExecutionResult(null, $errors);
+            return $this->finishExecute(null, $errors);
         }
 
         $this->variableValues = $coercedVariableValues;
@@ -337,7 +337,28 @@ class Executor implements Runtime
             });
         }
 
-        return new ExecutionResult(self::resultToArray($this->rootResult), $this->errors);
+        return $this->finishExecute($this->rootResult, $this->errors);
+    }
+
+    /**
+     * @param object|null $value
+     * @param Error[]     $errors
+     */
+    private function finishExecute($value, array $errors) : ExecutionResult
+    {
+        $this->rootResult     = null;
+        $this->errors         = null;
+        $this->queue          = null;
+        $this->schedule       = null;
+        $this->pending        = null;
+        $this->collector      = null;
+        $this->variableValues = null;
+
+        if ($value !== null) {
+            $value = self::resultToArray($value);
+        }
+
+        return new ExecutionResult($value, $errors);
     }
 
     /**
@@ -451,7 +472,7 @@ class Executor implements Runtime
         }
 
         $doResolve = $this->doResolve;
-        $doResolve(new ExecutionResult(self::resultToArray($this->rootResult), $this->errors));
+        $doResolve($this->finishExecute($this->rootResult, $this->errors));
     }
 
     private function spawn(ExecutionContext $ctx)
